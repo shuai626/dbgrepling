@@ -1,0 +1,6 @@
+align
+*.o
+*.sam
+binarysearch
+*.errors
+*.stats
