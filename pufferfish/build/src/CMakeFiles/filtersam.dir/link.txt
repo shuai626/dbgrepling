@@ -1,0 +1,1 @@
+/usr/bin/c++  -O3 -DNDEBUG   CMakeFiles/filtersam.dir/testing/SAMFilter.cpp.o  -o filtersam   -L/home/amao/Github/grepling/pufferfish/lib  -L/home/amao/Github/grepling/pufferfish/external/install/lib  -Wl,-rpath,/home/amao/Github/grepling/pufferfish/lib:/home/amao/Github/grepling/pufferfish/external/install/lib -lseqlib -lhts libpuffer.a -lbz2 -llzma -lz -pthread 

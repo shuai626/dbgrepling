@@ -1,0 +1,43 @@
+{
+	"sources" : 
+	[
+		{
+			"file" : "/home/amao/Github/grepling/pufferfish/build/CMakeFiles/libSetCover"
+		},
+		{
+			"file" : "/home/amao/Github/grepling/pufferfish/build/CMakeFiles/libSetCover.rule"
+		},
+		{
+			"file" : "/home/amao/Github/grepling/pufferfish/build/CMakeFiles/libSetCover-complete.rule"
+		},
+		{
+			"file" : "/home/amao/Github/grepling/pufferfish/build/libSetCover-prefix/src/libSetCover-stamp/libSetCover-install.rule"
+		},
+		{
+			"file" : "/home/amao/Github/grepling/pufferfish/build/libSetCover-prefix/src/libSetCover-stamp/libSetCover-mkdir.rule"
+		},
+		{
+			"file" : "/home/amao/Github/grepling/pufferfish/build/libSetCover-prefix/src/libSetCover-stamp/libSetCover-download.rule"
+		},
+		{
+			"file" : "/home/amao/Github/grepling/pufferfish/build/libSetCover-prefix/src/libSetCover-stamp/libSetCover-patch.rule"
+		},
+		{
+			"file" : "/home/amao/Github/grepling/pufferfish/build/libSetCover-prefix/src/libSetCover-stamp/libSetCover-configure.rule"
+		},
+		{
+			"file" : "/home/amao/Github/grepling/pufferfish/build/libSetCover-prefix/src/libSetCover-stamp/libSetCover-build.rule"
+		},
+		{
+			"file" : "/home/amao/Github/grepling/pufferfish/build/libSetCover-prefix/src/libSetCover-stamp/libSetCover-skip-update.rule"
+		}
+	],
+	"target" : 
+	{
+		"labels" : 
+		[
+			"libSetCover"
+		],
+		"name" : "libSetCover"
+	}
+}

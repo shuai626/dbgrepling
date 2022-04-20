@@ -1,0 +1,12 @@
+[
+{
+  "directory": "/home/amao/Github/grepling/pufferfish/build/external/asyncplusplus",
+  "command": "/usr/bin/c++  -DLIBASYNC_STATIC -I/home/amao/Github/grepling/pufferfish/external/asyncplusplus/include  -O3 -DNDEBUG   -std=c++11 -Wall -Wextra -pedantic -fno-rtti -pthread -std=gnu++14 -o CMakeFiles/Async++.dir/src/scheduler.cpp.o -c /home/amao/Github/grepling/pufferfish/external/asyncplusplus/src/scheduler.cpp",
+  "file": "/home/amao/Github/grepling/pufferfish/external/asyncplusplus/src/scheduler.cpp"
+},
+{
+  "directory": "/home/amao/Github/grepling/pufferfish/build/external/asyncplusplus",
+  "command": "/usr/bin/c++  -DLIBASYNC_STATIC -I/home/amao/Github/grepling/pufferfish/external/asyncplusplus/include  -O3 -DNDEBUG   -std=c++11 -Wall -Wextra -pedantic -fno-rtti -pthread -std=gnu++14 -o CMakeFiles/Async++.dir/src/threadpool_scheduler.cpp.o -c /home/amao/Github/grepling/pufferfish/external/asyncplusplus/src/threadpool_scheduler.cpp",
+  "file": "/home/amao/Github/grepling/pufferfish/external/asyncplusplus/src/threadpool_scheduler.cpp"
+}
+]

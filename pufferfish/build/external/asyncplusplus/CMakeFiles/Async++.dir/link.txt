@@ -1,0 +1,2 @@
+/usr/bin/ar qc libasync++.a  CMakeFiles/Async++.dir/src/scheduler.cpp.o CMakeFiles/Async++.dir/src/threadpool_scheduler.cpp.o
+/usr/bin/ranlib libasync++.a
