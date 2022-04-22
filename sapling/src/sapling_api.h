@@ -14,6 +14,17 @@
 #include "sa.h"
 #include "util.h"
 
+
+#include <sys/stat.h>
+
+long GetFileSize(std::string filename)
+{
+    struct stat stat_buf;
+    int rc = stat(filename.c_str(), &stat_buf);
+    return rc == 0 ? stat_buf.st_size : -1;
+}
+
+
 struct Sapling
 {
   // The reference genome
@@ -405,6 +416,10 @@ struct Sapling
     // Initialize checkpoints
     xlist = new long long[(1L<<buckets)+1];
     ylist = new long long[(1L<<buckets)+1];
+    // cout << "sizeof xlist: " << sizeof(xlist) << endl;
+    // cout << "xlist size: " << xlist->size() << endl;
+    // cout << "2*xlist memory: " << ((1L<<buckets)+1) * sizeof(long long) * 2 << "\n" << endl;
+
     for(size_t i = 0; i<(size_t)(1L<<buckets)+1; i++) xlist[i] = -1;
     for(size_t i = 0; i+k<=s.length(); i++)
     {
@@ -555,6 +570,12 @@ struct Sapling
     
     const char *saplingfn = saplingFnString.c_str();
     ifstream saplingf(saplingfn);
+
+    // get memory
+    long saSize = GetFileSize(fn);
+    long saplingSize = GetFileSize(saplingfn);
+    cout << "sa size: " << saSize << " sapling size: " << saplingSize << " total size: " << saSize+saplingSize << endl;
+    // printf("sa size: %lu, sapling size: %lu")
     
     if(f.good())
     {
@@ -636,6 +657,8 @@ struct Sapling
       }
       xlist = new long long[xlistsize];
       ylist = new long long[xlistsize];
+
+      
       err = fread(&xlist[0], sizeof(long long), xlistsize, infile);
       err = fread(&ylist[0], sizeof(long long), xlistsize, infile);
       err = fread(&maxOver, sizeof(int), 1, infile);
@@ -647,6 +670,9 @@ struct Sapling
       {
         cerr << "Error reading sapling data structure from file" << endl;
       }
+
+      // get memory
+      cout << "xlist size: " << xlistsize << " total memory: " << 2*xlistsize*sizeof(long long) << endl << endl;
     }
     else
     {
@@ -672,6 +698,9 @@ struct Sapling
       fwrite(&meanError, sizeof(int), 1, outfile);
       fwrite(&mostOver, sizeof(int), 1, outfile);
       fwrite(&mostUnder, sizeof(int), 1, outfile);
+
+      // get memory
+      cout << "xlist size: " << xlistsize << " total memory: " << 2*xlistsize*sizeof(long long) << endl << endl;
     }
   }
 
