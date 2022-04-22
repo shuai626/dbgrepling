@@ -1,3 +1,0 @@
-repository='https://github.com/COMBINE-lab/SeqLib.git'
-module=''
-tag='origin'

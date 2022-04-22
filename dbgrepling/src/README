@@ -1,0 +1,14 @@
+## DBGrepling
+
+To build: `make`
+To run: 
+```
+./dbgrepling <genome file (Fasta format)>
+  [saFn=<suffix array file (format described in manual, default <genome file>.sa)>] 
+  [sapFn=<sapling file (format described in manual, default <genome file>.sap>] 
+  [nb=<log number of buckets - overrides maxMem below, default None>] 
+  [maxMem=<max number of buckets will be (genome size)/val, default 10>] 
+  [k=<k, default 21>] 
+  [nq=<number of queries, default 5000000>] 
+  [errFn=<errors file if outputting them, default None>]
+```

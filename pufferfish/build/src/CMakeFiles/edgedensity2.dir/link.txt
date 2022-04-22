@@ -1,1 +1,0 @@
-/usr/bin/c++  -O3 -DNDEBUG   CMakeFiles/edgedensity2.dir/EdgeDensityCustom.cpp.o  -o edgedensity2   -L/home/amao/Github/grepling/pufferfish/lib  -L/home/amao/Github/grepling/pufferfish/external/install/lib  -Wl,-rpath,/home/amao/Github/grepling/pufferfish/lib:/home/amao/Github/grepling/pufferfish/external/install/lib -lz libpuffer.a -pthread 

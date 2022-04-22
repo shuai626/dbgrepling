@@ -1,1 +1,0 @@
-/usr/bin/c++  -O3 -DNDEBUG   CMakeFiles/krakmap.dir/KrakMap.cpp.o CMakeFiles/krakmap.dir/Taxa.cpp.o  -o krakmap   -L/home/amao/Github/grepling/pufferfish/lib  -L/home/amao/Github/grepling/pufferfish/external/install/lib  -Wl,-rpath,/home/amao/Github/grepling/pufferfish/lib:/home/amao/Github/grepling/pufferfish/external/install/lib libpuffer.a -pthread 

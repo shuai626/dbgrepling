@@ -1,0 +1,9 @@
+[submodule "pufferfish"]
+	path = pufferfish
+	url = https://github.com/COMBINE-lab/pufferfish.git
+[submodule "sapling"]
+	path = sapling
+	url = https://github.com/mkirsche/sapling
+[submodule "dbgfm"]
+	path = dbgfm
+	url = https://github.com/jts/dbgfm

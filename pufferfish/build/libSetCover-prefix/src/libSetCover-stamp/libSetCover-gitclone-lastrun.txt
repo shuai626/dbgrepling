@@ -1,3 +1,0 @@
-repository='https://github.com/martin-steinegger/setcover.git'
-module=''
-tag='origin'
