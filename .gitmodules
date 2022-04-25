@@ -4,3 +4,6 @@
 [submodule "sapling"]
 	path = sapling
 	url = https://github.com/mkirsche/sapling
+[submodule "dbgfm"]
+	path = dbgfm
+	url = https://github.com/jts/dbgfm
