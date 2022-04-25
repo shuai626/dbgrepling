@@ -9,16 +9,17 @@
 #include <sstream>
 #include <type_traits>
 #include <vector>
+#include <limits>
 
 #include "CanonicalKmer.hpp"
 #include "cereal/types/string.hpp"
 #include "cereal/types/vector.hpp"
-#include "jellyfish/mer_dna.hpp"
+//#include "jellyfish/mer_dna.hpp"
 #include "Kmer.hpp"
 #include "spdlog/spdlog.h"
 #include "spdlog/fmt/ostr.h"
 #include "spdlog/fmt/fmt.h"
-#include "chobo/small_vector.hpp"
+#include "itlib/small_vector.hpp"
 #include "parallel_hashmap/phmap.h"
 #include "compact_vector/compact_vector.hpp"
 
@@ -68,7 +69,7 @@ namespace pufferfish {
         constexpr const char EXTENSION[] = "extension.bin";
         constexpr const char EXTENSIONSIZE[] = "extensionSize.bin";
         constexpr const char DIRECTION[] = "direction.bin";
-		constexpr const char INFO[] = "info.json";
+		    constexpr const char INFO[] = "info.json";
 
         static constexpr int8_t rc_table[128] = {
                 78, 78, 78, 78, 78, 78, 78, 78, 78, 78, 78, 78, 78, 78, 78, 78, // 15
@@ -103,9 +104,28 @@ namespace pufferfish {
       // encapsulates policy choices about what types of mappings
       // should be allowed (e.g. orphans, dovetails, etc.)
       struct MappingConstraintPolicy {
-	bool noOrphans;
-	bool noDiscordant;
-	bool noDovetail;
+        bool noOrphans;
+        bool noDiscordant;
+        bool noDovetail;
+        // after merging chains for paired-end reads 
+        // only chains having this threshold score 
+        // *with respect to the best chain on the same target*
+        // will be passed to the next stage of mapping.
+        double post_merge_chain_sub_thresh{0.9};
+        double inv_post_merge_chain_sub_thresh{1.0 / post_merge_chain_sub_thresh};
+        double orphan_chain_sub_thresh{1.0};
+
+        double postMergeChainSubThresh() const { return post_merge_chain_sub_thresh; }
+        void setPostMergeChainSubThresh(double t) {
+          post_merge_chain_sub_thresh = t;
+          inv_post_merge_chain_sub_thresh = std::nexttoward(1.0/post_merge_chain_sub_thresh, std::numeric_limits<long double>::infinity());
+        }
+
+        double orphanChainSubThresh() const { return orphan_chain_sub_thresh; }
+        void setOrphanChainSubThresh(const double t) {
+          orphan_chain_sub_thresh = t;
+        }
+
       };
 
       struct pair_hash
@@ -629,11 +649,15 @@ Compile-time selection between list-like and map-like printing.
             //return mems.empty() ? 0 : (mems[0].isFw ? mems[0].tpos-mems[0].rpos : mems[0].tpos - (readLen-mems[0].rpos-mems[0].extendedlen));
           }
 
+          // returns the approximate read start position (approximate because
+          // alignment / selective alignment hasn't been computed yet, and we 
+          // don't know where the read necessarily starts).  If this value is 
+          // less than 0, then the read overhangs the start of the transcript.
           inline int64_t approxReadStartPos() const {
             if (mems.empty()) { return 0; }
             auto& m = mems.front();
-            return std::max(static_cast<int64_t>(0), isFw ? (static_cast<int64_t>(m.tpos) - static_cast<int64_t>(m.rpos)) :
-              (static_cast<int64_t>(m.tpos) - ((static_cast<int64_t>(readLen) - static_cast<int64_t>(m.rpos + m.extendedlen)))));
+            return isFw ? (static_cast<int64_t>(m.tpos) - static_cast<int64_t>(m.rpos)) :
+              (static_cast<int64_t>(m.tpos) - ((static_cast<int64_t>(readLen) - static_cast<int64_t>(m.rpos + m.extendedlen))));
           }
 
             inline int64_t firstRefPos() const { return getTrFirstHitPos(); }
@@ -838,6 +862,7 @@ Compile-time selection between list-like and map-like printing.
         int16_t matchScore;
         int16_t gapExtendPenalty;
         int16_t gapOpenPenalty;
+        int16_t mismatchPenalty;
         double minScoreFraction{0.0};
         bool mimicBT2{false};
         bool mimicBT2Strict{false};
@@ -847,6 +872,8 @@ Compile-time selection between list-like and map-like printing.
         bool noDovetail{false};
         uint32_t maxFragmentLength{1000};
         PuffAlignmentMode alignmentMode{PuffAlignmentMode::SCORE_ONLY};
+        bool bestStrata{false};
+        bool decoyPresent{false};
       };
 
         struct QuasiAlignment {
@@ -1202,7 +1229,9 @@ Compile-time selection between list-like and map-like printing.
             std::atomic<uint64_t> correctAlignment{0};
             std::atomic<uint64_t> maxMultimapping{0};
             std::atomic<uint64_t> numDovetails{0};
+            std::atomic<uint64_t> tooShortReads{0};
 
+            std::atomic<uint64_t> skippedAlignments_notAlignable{0};
             std::atomic<uint64_t> skippedAlignments_byCache{0};
             std::atomic<uint64_t> skippedAlignments_byCov{0};
             std::atomic<uint64_t> totalAlignmentAttempts{0};

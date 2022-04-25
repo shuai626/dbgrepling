@@ -388,6 +388,7 @@ int pufferfishIndex(pufferfish::IndexOptions& indexOpts) {
   std::string logPath = outdir + "/ref_indexing.log";
   auto fileSink = std::make_shared<spdlog::sinks::simple_file_sink_st>(logPath);
   auto consoleSink = std::make_shared<spdlog::sinks::ansicolor_stderr_sink_mt>();
+  consoleSink->set_color(spdlog::level::warn, consoleSink->magenta);
   auto consoleLog = spdlog::create("puff::index::stderrLog", {consoleSink});
   auto fileLog = spdlog::create("puff::index::fileLog", {fileSink});
   std::vector<spdlog::sink_ptr> sinks{consoleSink, fileSink};
@@ -414,6 +415,12 @@ int pufferfishIndex(pufferfish::IndexOptions& indexOpts) {
     }
     if (indexOpts.keep_duplicates) {
       args.push_back("--keepDuplicates");
+    }
+    if (indexOpts.expect_transcriptome) {
+      args.push_back("--expectTranscriptome");
+    }
+    if (indexOpts.noclip_polya) {
+      args.push_back("--noClip");
     }
     args.push_back("--klen");
     args.push_back(std::to_string(k));
@@ -672,6 +679,7 @@ int pufferfishIndex(pufferfish::IndexOptions& indexOpts) {
   if (!indexOpts.isSparse and !indexOpts.lossySampling) {  
     // if using quasi-dictionary idea (https://arxiv.org/pdf/1703.00667.pdf)
     compact::ts_vector<uint64_t> posVec(w, nkeys);
+    posVec.clear_mem();
     {
 
       struct ContigVecChunk {

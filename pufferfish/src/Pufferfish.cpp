@@ -3,20 +3,20 @@
 //
 // Copyright (C) 2017 Rob Patro, Fatemeh Almodaresi, Hirak Sarkar
 //
-// This file is part of Pufferfish.
+// This file is part of pufferfish.
 //
-// RapMap is free software: you can redistribute it and/or modify
+// pufferfish is free software: you can redistribute it and/or modify
 // it under the terms of the GNU General Public License as published by
 // the Free Software Foundation, either version 3 of the License, or
 // (at your option) any later version.
 //
-// RapMap is distributed in the hope that it will be useful,
+// pufferfish is distributed in the hope that it will be useful,
 // but WITHOUT ANY WARRANTY; without even the implied warranty of
 // MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
 // GNU General Public License for more details.
 //
 // You should have received a copy of the GNU General Public License
-// along with RapMap.  If not, see <http://www.gnu.org/licenses/>.
+// along with pufferfish.  If not, see <http://www.gnu.org/licenses/>.
 //
 
 #include "clipp.h"
@@ -36,26 +36,38 @@
 
 int pufferfishIndex(pufferfish::IndexOptions& indexOpts); // int argc, char* argv[]);
 int pufferfishTest(pufferfish::TestOptions& testOpts);    // int argc, char* argv[]);
-int pufferfishValidate(
-                       pufferfish::ValidateOptions& validateOpts); // int argc, char* argv[]);
-int pufferfishTestLookup(
-                         pufferfish::ValidateOptions& lookupOpts); // int argc, char* argv[]);
+int pufferfishValidate(pufferfish::ValidateOptions& validateOpts); // int argc, char* argv[]);
+int pufferfishTestLookup(pufferfish::ValidateOptions& lookupOpts); // int argc, char* argv[]);
 int pufferfishAligner(pufferfish::AlignmentOpts& alignmentOpts) ;
 int pufferfishExamine(pufferfish::ExamineOptions& examineOpts);
 int pufferfishStats(pufferfish::StatsOptions& statsOpts);
+int pufferfishKmerQuery(pufferfish::KmerQueryOptions& kqueryOpts);
 
 int main(int argc, char* argv[]) {
   using namespace clipp;
   using std::cout;
   std::setlocale(LC_ALL, "en_US.UTF-8");
 
-  enum class mode {help, index, validate, lookup, align, examine, stat};
+
+  enum class mode {help, index, validate, lookup, kquery, align, examine, stat};
   mode selected = mode::help;
+
+  std::map<std::string, clipp::parameter> cmd_map = {
+    {"align", command("align").set(selected, mode::align)},
+    {"index", command("index").set(selected, mode::index)},
+    {"validate", command("validate").set(selected, mode::validate)},
+    {"lookup", command("lookup").set(selected, mode::lookup)},
+    {"kquery", command("kquery").set(selected, mode::kquery)},
+    {"examine", command("examine").set(selected, mode::examine)},
+    {"stat", command("stat").set(selected, mode::stat)}
+  };
+
   pufferfish::AlignmentOpts alignmentOpt ;
   pufferfish::IndexOptions indexOpt;
   //TestOptions testOpt;
   pufferfish::ValidateOptions validateOpt;
   pufferfish::ValidateOptions lookupOpt;
+  pufferfish::KmerQueryOptions kmerQueryOpt;
   pufferfish::ExamineOptions examineOpt;
   pufferfish::StatsOptions statOpt;
 
@@ -129,6 +141,8 @@ int main(int argc, char* argv[]) {
                     (required("-r", "--ref") & values(ensure_file_exists, "ref_file", indexOpt.rfile)) % "path to the reference fasta file",
                     (required("-o", "--output") & value("output_dir", indexOpt.outdir)) % "directory where index is written",
                     //(required("-g", "--gfa") & value("gfa_file", indexOpt.gfa_file)) % "path to the GFA file",
+                    (option("--expectTranscriptome").set(indexOpt.expect_transcriptome) % 
+                    "expect (non-decoy) sequences to be transcripts rather than genomic contigs"),
                     (option("--headerSep") & value("sep_strs", indexOpt.header_sep)) %
                     "Instead of a space or tab, break the header at the first "
                     "occurrence of this string, and name the transcript as the token before "
@@ -137,6 +151,7 @@ int main(int argc, char* argv[]) {
                     (option("--keepDuplicates").set(indexOpt.keep_duplicates) % "Retain duplicate references in the input"),
                     (option("-d", "--decoys") & value("decoy_list", indexOpt.decoy_file)) %
                     "Treat these sequences as decoys that may be sequence-similar to some known indexed reference",
+                    (option("-n", "--noClip").set(indexOpt.noclip_polya)) % "Don't clip poly-A tails from the ends of target sequences",
                     (option("-f", "--filt-size") & value("filt_size", indexOpt.filt_size)) % "filter size to pass to TwoPaCo when building the reference dBG",
                     (option("--tmpdir") & value("twopaco_tmp_dir", indexOpt.twopaco_tmp_dir)) % "temporary work directory to pass to TwoPaCo when building the reference dBG",
                     (option("-k", "--klen") & value("kmer_length", indexOpt.k))  % "length of the k-mer with which the dBG was built (default = 31)",
@@ -174,14 +189,27 @@ int main(int argc, char* argv[]) {
                      (required("-i", "--index") & value("index", lookupOpt.indexDir)) % "directory where the pufferfish index is stored",
                      (required("-r", "--ref") & value("ref", lookupOpt.refFile)) % "fasta file with reference sequences"
                      );
+  
+  auto kmerQueryMode = (
+                      command("kquery").set(selected, mode::kquery),
+                     (required("-i", "--index") & value("index", kmerQueryOpt.indexDir)) % "directory where the pufferfish index is stored",
+                     (required("-q", "--query") & values("ref", kmerQueryOpt.queryFiles)) % "fasta file with reference sequences",
+                     (option("-p", "--threads") & value("threads", kmerQueryOpt.num_threads))  % "total number of threads to use for mapping k-mers"
+                      );
+
   std::string statType = "ctab";
   auto statMode = (
                     command("stat").set(selected, mode::stat),
-                    (option("-t", "--type") & value("statType", statType)) % "statType (options:ctab)",
+                    (option("-t", "--type") & value("statType", statType)) % "statType (options:ctab, motif)",
                     (required("-i", "--index") & value("index", statOpt.indexDir)) % "directory where the pufferfish index is stored");
   if (statType == "ctab") {
+      //std::cerr << statType << "\n";
       statOpt.statType = pufferfish::StatType::ctab;
+  } else if (statType == "motif") {
+      //std::cerr << statType << "\n";
+      statOpt.statType = pufferfish::StatType::motif;
   }
+
   std::string throwaway;
   auto isValidRatio = [](const char* s) -> void {
     float r{0.0};
@@ -231,6 +259,8 @@ int main(int argc, char* argv[]) {
                     (option("--noDovetail").set(alignmentOpt.noDovetail, true)) % "Disallow dovetail alignment for paired end reads",
 		            (option("-z", "--compressedOutput").set(alignmentOpt.compressedOutput, true)) % "Compress (gzip) the output file",
                     (
+                      (option("-r", "--radOut").set(alignmentOpt.radOut, true)) % "Write output in the format required for krakMap"
+                      |
                       (option("-k", "--krakOut").set(alignmentOpt.krakOut, true)) % "Write output in the format required for krakMap"
                       |
                       (option("-p", "--pam").set(alignmentOpt.salmonOut, true)) % "Write output in the format required for salmon"
@@ -252,11 +282,19 @@ int main(int argc, char* argv[]) {
                     (option("--consensusFraction") & value("consensus fraction", alignmentOpt.consensusFraction)) % "The fraction of mems, relative to the reference with "
                     "the maximum number of mems, that a reference must contain in order "
                     "to move forward with computing an optimal chain score (default=0.65)",
+                    (option("--gapOpenPenalty") & value("gap open penalty", alignmentOpt.gapOpenPenalty)) % " gap open penalty (default 5)",
+                    (option("--gapExtendPenalty") & value("gap extend penalty", alignmentOpt.gapExtendPenalty)) % "gap extend penalty (default 3)",
+                    (option("--mismatchScore") & value("gap extend score", alignmentOpt.mismatchScore)) % " mismatch score, should be negative or at least smaller than match score to make sense (default -4)",
+                    (option("--matchScore") & value("match score", alignmentOpt.matchScore)) % " match score (default 2)",
+                    (option("--altSkip") & value("alternative k-mer skip", alignmentOpt.altSkip)) % "Set the value of k-mer skipping, skipping happens if a mis-match is encountered at the time of querying k-kmers (default 5)",
+                    (option("--preMergeChainSubThresh") & value("pre merge chain threshold", alignmentOpt.preMergeChainSubThresh)) % "The threshold of sub-optimal chains, compared to the best chain on a giventarget, that will be retained and passed to the next phase of mapping.  Specifically, if the best chain for a read (or read-end in paired-end mode) to target t has score X_t, then all chains for this read wit score >= X_t * preMergeChainSubThresh will be retained and passed to subsequent mapping phases.  This value must be in the range [0, 1] (default 0.9)",
+                    (option("--postMergeChainSubThresh") & value("post merge chain threshold", alignmentOpt.postMergeChainSubThresh)) % "The threshold of sub-optimal chain pairs, compared to the best chain pair on a given target, that will be retained and passed to the next phase of mapping.  This is different than preMergeChainSubThresh, because this is applied to pairs of chains (from the ends of paired-end reads) after merging (i.e. after checking concordancy constraints etc.).  Specifically, if the best chain pair to target t has score X_t, then all chain pairs for this read pair with score >= X_t * postMergeChainSubThresh will be retained and passed to subsequent mapping phases.  This value must be in the range [0, 1]. Note: This option is only meaningful for paired-end libraries, and is ignored for single-end libraries. (default 0.9)",
+                    (option("--orphanChainSubThresh") & value("orphan chain threshold", alignmentOpt.orphanChainSubThresh)) % "This threshold sets a global sub-optimality threshold for chains corresponding to orphan mappings.  That is, if the merging procedure results in no concordant mappings then only orphan mappings with a chain score >= orphanChainSubThresh * bestChainScore will be retained and passed to subsequent mapping phases.  This value must be in the range [0, 1]. Note: This option is only meaningful for paired-end libraries, and is ignored for single-end libraries. (default 1)",
                     (option("--noAlignmentCache").set(alignmentOpt.useAlignmentCache, false)) % "Do not use the alignment cache during the alignment."
   );
 
   auto cli = (
-              (indexMode | validateMode | lookupMode | alignMode | examineMode | statMode | command("help").set(selected,mode::help) ),
+              (indexMode | validateMode | lookupMode | kmerQueryMode | alignMode | examineMode | statMode | command("help").set(selected,mode::help) ),
               option("-v", "--version").call([]{std::cout << "version " << pufferfish::version << "\n"; std::exit(0);}).doc("show version"));
 
   decltype(parse(argc, argv, cli)) res;
@@ -275,14 +313,25 @@ int main(int argc, char* argv[]) {
     case mode::index: pufferfishIndex(indexOpt);  break;
     case mode::validate: pufferfishValidate(validateOpt);  break;
     case mode::lookup: pufferfishTestLookup(lookupOpt); break;
+    case mode::kquery: pufferfishKmerQuery(kmerQueryOpt); break;
     case mode::align: pufferfishAligner(alignmentOpt); break;
     case mode::examine: pufferfishExamine(examineOpt); break;
     case mode::stat: pufferfishStats(statOpt); break;
     case mode::help: std::cout << make_man_page(cli, pufferfish::progname); break;
     }
   } else {
+    std::string nl = "The valid commands to pufferfish are : ";
+    bool first = true;
+    for (auto& kv : cmd_map) {
+      nl += (first ? "{" : " ") + kv.first + ",";
+      first = false;
+    }
+    nl.pop_back();
+    nl += "}";
+
     auto b = res.begin();
     auto e = res.end();
+    // if there was a command provided
     if (std::distance(b,e) > 0) {
       if (b->arg() == "index") {
         std::cout << make_man_page(indexMode, pufferfish::progname);
@@ -294,11 +343,11 @@ int main(int argc, char* argv[]) {
         std::cout << make_man_page(alignMode, pufferfish::progname);
       } else {
         std::cout << "There is no command \"" << b->arg() << "\"\n";
-        std::cout << usage_lines(cli, pufferfish::progname) << '\n';
+        std::cout << nl << '\n';
         return 1;
       }
     } else {
-      std::cout << usage_lines(cli, pufferfish::progname) << '\n';
+      std::cout << nl << '\n';
       return 1;
     }
   }

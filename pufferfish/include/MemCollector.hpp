@@ -8,14 +8,14 @@
 #include "PufferfishLossyIndex.hpp"
 #include "Util.hpp"
 #include "edlib.h"
-#include "jellyfish/mer_dna.hpp"
+// #include "jellyfish/mer_dna.hpp"
 
 #include <algorithm>
 #include <iostream>
 #include <iterator>
 #include <sparsepp/spp.h>
 #include "parallel_hashmap/phmap.h"
-#include "chobo/small_vector.hpp"
+#include "itlib/small_vector.hpp"
 #include "MemChainer.hpp"
 
 
@@ -23,40 +23,65 @@ template <typename PufferfishIndexT> class MemCollector {
 enum class ExpansionTerminationType : uint8_t { MISMATCH = 0, CONTIG_END, READ_END };  
 
 public:
-  explicit MemCollector(PufferfishIndexT* pfi) : pfi_(pfi) { k = pfi_->k(); }
+  explicit MemCollector(PufferfishIndexT* pfi) : pfi_(pfi) { 
+    k = pfi_->k(); 
+    setChainSubOptThresh(pre_merge_chain_sub_thresh_);
+  }
 
   size_t expandHitEfficient(pufferfish::util::ProjectedHits& hit,
                           pufferfish::CanonicalKmerIterator& kit,
                           ExpansionTerminationType& et);
+  
+  bool get_raw_hits_sketch(std::string &read,
+                  pufferfish::util::QueryCache& qc,
+                  bool isLeft=false,
+                  bool verbose=false);
 
   bool operator()(std::string &read,
                   pufferfish::util::QueryCache& qc,
                   bool isLeft=false,
                   bool verbose=false);
 
-  bool findChains(std::string &read,
-                  pufferfish::util::CachedVectorMap<size_t, std::vector<pufferfish::util::MemCluster>, std::hash<size_t>>& memClusters,
-                  //phmap::flat_hash_map<size_t, std::vector<pufferfish::util::MemCluster>>& memClusters,
-                  uint32_t maxSpliceGap,
-                  pufferfish::util::MateStatus mateStatus,
-                  bool hChain=false,
-                  bool isLeft=false,
-                  bool verbose=false);
-  void clear();
+void setChainSubOptThresh(double pre_merge_chain_sub_thresh);
 
-  void configureMemClusterer(uint32_t max);
+double chainSubOptThresh() const;
 
-  void setConsensusFraction(double cf);
+bool findChains(std::string& read,
+                pufferfish::util::CachedVectorMap<
+                    size_t, std::vector<pufferfish::util::MemCluster>,
+                    std::hash<size_t>>& memClusters,
+                // phmap::flat_hash_map<size_t,
+                // std::vector<pufferfish::util::MemCluster>>& memClusters,
+                uint32_t maxSpliceGap, pufferfish::util::MateStatus mateStatus,
+                bool hChain = false, bool isLeft = false, bool verbose = false);
+void clear();
 
-  double getConsensusFraction() const;
+void configureMemClusterer(uint32_t max);
 
-  void setHitFilterPolicy(pufferfish::util::HitFilterPolicy hfp);
+void setConsensusFraction(double cf);
 
-  pufferfish::util::HitFilterPolicy getHitFilterPolicy() const;
+void setAltSkip(uint32_t altSkip);
+
+double getConsensusFraction() const;
+
+void setHitFilterPolicy(pufferfish::util::HitFilterPolicy hfp);
+
+pufferfish::util::HitFilterPolicy getHitFilterPolicy() const;
+
+inline std::vector<std::pair<int, pufferfish::util::ProjectedHits>>& get_left_hits() { 
+  return left_rawHits;
+}
+inline std::vector<std::pair<int, pufferfish::util::ProjectedHits>>& get_right_hits() {
+  return right_rawHits;
+}
 
 private:
   PufferfishIndexT* pfi_;
   size_t k;
+  uint32_t altSkip{3};
+  double pre_merge_chain_sub_thresh_{0.9};
+  double inv_pre_merge_chain_sub_thresh_{1.0/0.9};
+
   //AlignerEngine ae_;
   std::vector<pufferfish::util::UniMemInfo> memCollectionLeft;
   std::vector<pufferfish::util::UniMemInfo> memCollectionRight;

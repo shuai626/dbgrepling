@@ -15,6 +15,7 @@ public:
   std::string outdir;
   std::string decoy_file{""};
   std::string header_sep{""};
+  bool noclip_polya{false};
   bool isSparse{false};
   uint32_t extensionSize{4};
   uint32_t sampleSize{9};
@@ -26,6 +27,7 @@ public:
   bool buildEdgeVec{false};
   bool buildEqCls{false};
   bool featuresRef{false};
+  bool expect_transcriptome{false};
   std::string twopaco_tmp_dir{""};
 };
 
@@ -41,12 +43,19 @@ public:
 };
 
 enum StatType {
-    ctab
+    ctab, motif
 };
 class StatsOptions {
 public:
     StatType statType{ctab};
     std::string indexDir;
+};
+
+class KmerQueryOptions {
+  public:
+  std::string indexDir;
+  std::vector<std::string> queryFiles;
+  uint32_t num_threads{16};
 };
 
 class ValidateOptions {
@@ -70,6 +79,7 @@ public:
   uint32_t maxFragmentLength{1000};
   double scoreRatio{0.6};
   double consensusFraction{0.65};
+  uint32_t altSkip{5};
   std::string outname;
   double quasiCov{0.0};
   bool pairedEnd{false};
@@ -83,6 +93,7 @@ public:
   bool justMap{false};
   bool krakOut{false};
   bool salmonOut{false};
+  bool radOut{false};
   bool noDiscordant{false};
   bool noOrphan{false};
   bool noDovetail{false};
@@ -93,7 +104,7 @@ public:
   int32_t gapOpenPenalty{5};
   int32_t gapExtendPenalty{3};
   int32_t matchScore{2};
-  int32_t missMatchScore{-4};
+  int32_t mismatchScore{-4};
   uint32_t refExtendLength{20};
   double minScoreFraction{0.65};
   bool fullAlignment{false};
@@ -115,6 +126,9 @@ public:
   bool allowSoftclip{false};
   bool useAlignmentCache{true};
   uint32_t alignmentStreamLimit{10000};
+  double preMergeChainSubThresh{0.9};
+  double postMergeChainSubThresh{0.9};
+  double orphanChainSubThresh{1};
 };
 }
 

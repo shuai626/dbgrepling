@@ -10,6 +10,7 @@
 #include "compact_iterator.hpp"
 #include <bitset>
 #include <iostream>
+#include <sys/mman.h>
 
 namespace compact {
   
@@ -52,6 +53,7 @@ namespace compact {
             size_t m_capacity;         // Capacity in number of elements
             W *m_mem;
             mio::mmap_source ro_mmap;
+            bool is_anon_mmaped = false;
         public:
             // Number of bits required for indices/values in the range [0, s).
             static unsigned required_bits(size_t s) {
@@ -97,7 +99,10 @@ namespace compact {
 
             ~vector() {
                 if (!ro_mmap.is_mapped()) {
-                    m_allocator.deallocate(m_mem, elements_to_words(m_capacity, bits()));
+                    if(!is_anon_mmaped)
+                        m_allocator.deallocate(m_mem, elements_to_words(m_capacity, bits()));
+                    else
+                        munmap(m_mem, sizeof(W) * elements_to_words(m_capacity, bits()));
                 }
             }
 
@@ -199,6 +204,7 @@ namespace compact {
             const W *get() const { return m_mem; }
 
             size_t bytes() const { return sizeof(W) * elements_to_words(m_size, bits()); }
+            size_t capacity_bytes() const { return sizeof(W) * elements_to_words(m_capacity, bits()); }
 
             inline unsigned bits() const { return static_cast<const Derived *>(this)->bits(); }
 
@@ -212,7 +218,7 @@ namespace compact {
             // *Note* : would be nice to have the constructor
             // optionally take a value to fill in or use a default ...
             inline void clear_mem() {
-                std::memset(this->get(), 0, this->bytes());
+                std::memset(this->get(), 0, this->capacity_bytes());
             }
 
             void serialize(std::ofstream &of) {
@@ -233,60 +239,80 @@ namespace compact {
                 //std::cerr << "wrote " << bytes() << " bytes of data at the end\n";
             }
 
-            void deserialize(const std::string &fname, bool mmap) {
-                std::error_code error;
-                if (mmap) {
-                    // load the vector *read only* by mmap
-                    ro_mmap.map(fname, error);
-                    if (error) { std::cerr << "error = " << error << "\n"; }
-                    const char *data = ro_mmap.data();
-                    data += sizeof(uint64_t);
-                    uint64_t bits_per_element;
-                    std::memcpy(reinterpret_cast<void *>(&bits_per_element),
-                                reinterpret_cast<void *>(const_cast<char *>(data)), sizeof(bits_per_element));
-                    //std::cerr<< "bits / element = " << bits_per_element << "\n";
-                    data += sizeof(W);
-                    uint64_t w_size{0};
-                    std::memcpy(reinterpret_cast<void *>(&w_size), reinterpret_cast<void *>(const_cast<char *>(data)),
-                                sizeof(w_size));
-                    m_size = w_size;
-                    std::cerr << "size = " << m_size << "\n";
-                    data += sizeof(w_size);
-                    uint64_t w_capacity{0};
-                    std::memcpy(reinterpret_cast<void *>(&w_capacity),
-                                reinterpret_cast<void *>(const_cast<char *>(data)), sizeof(w_capacity));
-                    m_capacity = w_capacity;
-                    //std::cerr<< "capacity = " << m_capacity << "\n";
-                    data += sizeof(w_capacity);
-                    m_allocator.deallocate(m_mem, elements_to_words(m_capacity, bits()));
-                    m_mem = reinterpret_cast<W *>(const_cast<char *>(data));
-                } else {
-                    // load the vector by reading from file
-                    std::ifstream ifile(fname, std::ios::binary);
-                    uint64_t static_flag{0};
-                    ifile.read(reinterpret_cast<char *>(&static_flag), sizeof(static_flag));
+            void deserialize(const std::string& fname, bool mmap ) {
+                uint64_t bits_per_element{0}, w_size{0}, w_capacity{0};
+                deserialize(fname, mmap, bits_per_element, w_size, w_capacity);
+            }
 
-                    uint64_t bits_per_element;
-                    ifile.read(reinterpret_cast<char *>(&bits_per_element), sizeof(bits_per_element));
-
-                    //std::cerr<< "bits / element = " << bits_per_element << "\n";
-
-                    uint64_t w_size{0};
-                    ifile.read(reinterpret_cast<char *>(&w_size), sizeof(w_size));
-                    m_size = w_size;
-                    std::cerr << "size = " << m_size << "\n";
-
-                    uint64_t w_capacity{0};
-                    ifile.read(reinterpret_cast<char *>(&w_capacity), sizeof(w_capacity));
-                    m_capacity = w_capacity;
-                    //std::cerr<< "capacity = " << m_capacity << "\n";
-
-                    m_allocator.deallocate(m_mem, elements_to_words(m_capacity, bits()));
-                    m_mem = m_allocator.allocate(elements_to_words(m_capacity, bits()));
-                    if (m_mem == nullptr) throw std::bad_alloc();
-                    ifile.read(reinterpret_cast<char *>(m_mem), sizeof(W) * elements_to_words(m_size, bits()));
+            void deserialize( const std::string& fname, bool mmap,
+                              uint64_t& bits_per_element, uint64_t& w_size, uint64_t& w_capacity) {
+              std::error_code error;
+              if (mmap) {
+                // load the vector *read only* by mmap
+                ro_mmap.map(fname, error);
+                if (error) {
+                  std::cerr << "error = " << error << "\n";
                 }
+                const char* data = ro_mmap.data();
+                data += sizeof(uint64_t);
+                std::memcpy(reinterpret_cast<void*>(&bits_per_element),
+                            reinterpret_cast<void*>(const_cast<char*>(data)),
+                            sizeof(bits_per_element));
+                // std::cerr<< "bits / element = " << bits_per_element << "\n";
+                data += sizeof(W);
+                std::memcpy(reinterpret_cast<void*>(&w_size),
+                            reinterpret_cast<void*>(const_cast<char*>(data)),
+                            sizeof(w_size));
+                m_size = w_size;
+                std::cerr << "size = " << m_size << "\n";
+                data += sizeof(w_size);
+                std::memcpy(reinterpret_cast<void*>(&w_capacity),
+                            reinterpret_cast<void*>(const_cast<char*>(data)),
+                            sizeof(w_capacity));
+                m_capacity = w_capacity;
+                // std::cerr<< "capacity = " << m_capacity << "\n";
+                data += sizeof(w_capacity);
+                m_allocator.deallocate(m_mem,
+                                       elements_to_words(m_capacity, bits()));
+                m_mem = reinterpret_cast<W*>(const_cast<char*>(data));
+              } else {
+                // load the vector by reading from file
+                std::ifstream ifile(fname, std::ios::binary);
+                uint64_t static_flag{0};
+                ifile.read(reinterpret_cast<char*>(&static_flag),
+                           sizeof(static_flag));
 
+                ifile.read(reinterpret_cast<char*>(&bits_per_element),
+                           sizeof(bits_per_element));
+
+                // std::cerr<< "bits / element = " << bits_per_element << "\n";
+
+                ifile.read(reinterpret_cast<char*>(&w_size), sizeof(w_size));
+                m_size = w_size;
+                std::cerr << "size = " << m_size << "\n";
+
+                ifile.read(reinterpret_cast<char*>(&w_capacity),
+                           sizeof(w_capacity));
+                m_capacity = w_capacity;
+                // std::cerr<< "capacity = " << m_capacity << "\n";
+
+                m_allocator.deallocate(m_mem,
+                                       elements_to_words(m_capacity, bits()));
+                // m_mem =
+                //     m_allocator.allocate(elements_to_words(m_capacity, bits_per_element));
+                // if (m_mem == nullptr)
+                //   throw std::bad_alloc();
+                m_mem = nullptr;
+                const size_t cap_len = sizeof(W) * elements_to_words(m_capacity, bits_per_element);
+                void* ptr = ::mmap(0, cap_len, PROT_READ | PROT_WRITE, MAP_ANON | MAP_SHARED, -1, 0);
+                if(ptr == MAP_FAILED)
+                    throw std::bad_alloc();
+                is_anon_mmaped = true;
+                m_mem = reinterpret_cast<W*>(ptr);
+                ifile.read(reinterpret_cast<char*>(m_mem),
+                           sizeof(W) * elements_to_words(m_size, bits_per_element));
+                mprotect(m_mem, cap_len, PROT_READ);
+              }
             }
 
             void touch_all_pages(uint64_t bits_per_element) {
@@ -372,10 +398,15 @@ namespace compact {
         protected:
             void enlarge() {
                 const size_t new_capacity = std::max(m_capacity * 2, (size_t) 1);
-                W *new_mem = m_allocator.allocate(elements_to_words(new_capacity, bits()));
+                const size_t new_capacity_in_words = elements_to_words(new_capacity, bits());
+                const size_t new_capacity_in_bytes = sizeof(W) * elements_to_words(new_capacity, bits());
+                const size_t old_capacity_in_words = elements_to_words(m_capacity, bits());
+
+                W *new_mem = m_allocator.allocate(new_capacity_in_words);
                 if (new_mem == nullptr) throw std::bad_alloc();
-                std::copy(m_mem, m_mem + elements_to_words(m_capacity, bits()), new_mem);
-                m_allocator.deallocate(m_mem, elements_to_words(m_capacity, bits()));
+                std::memset(new_mem, 0, new_capacity_in_bytes);
+                std::copy(m_mem, m_mem + old_capacity_in_words, new_mem);
+                m_allocator.deallocate(m_mem, old_capacity_in_words);
                 m_mem = new_mem;
                 m_capacity = new_capacity;
             }
@@ -436,6 +467,12 @@ namespace compact {
           }
 
             void set_m_bits(size_t m) { m_bits = m; }
+
+            void deserialize(const std::string& fname, bool mmap) {
+                uint64_t bits_per_element, w_size, w_capacity;
+                static_cast<super*>(this)->deserialize(fname, mmap, bits_per_element, w_size, w_capacity);
+                set_m_bits(bits_per_element);
+            }
         };
 
     } // namespace vector_imp

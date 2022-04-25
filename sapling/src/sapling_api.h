@@ -514,7 +514,7 @@ struct Sapling
     std::ostringstream out("");
     
     // Get the reference genome with non-genome characters removed
-    // cout << "Reading reference genome" << endl;
+    cout << "Reading reference genome" << endl;
     size_t charCount = 0;
     string curName = "";
     while (getline(input, cur))
@@ -558,19 +558,19 @@ struct Sapling
     
     if(f.good())
     {
-      // cout << "Reading suffix array from file" << endl;
+      cout << "Reading suffix array from file" << endl;
       
       lsa = SuffixArray();
       
       FILE *infile = fopen (fn, "rb");
       size_t size;
       size_t err = fread(&size, sizeof(size_t), 1, infile);
-      // cout << size << endl;
+      cout << size << endl;
       lsa.inv = vector<size_t>();
       lsa.inv.resize(size);
       err = fread(&lsa.inv[0], sizeof(size_t), size, infile);
-      // cout << lsa.inv.size() << endl;
-      // cout << lsa.inv[0] << endl;
+      cout << lsa.inv.size() << endl;
+      cout << lsa.inv[0] << endl;
       err = fread(&size, sizeof(size_t), 1, infile);
       lsa.lcp = vector<size_t>();
       lsa.lcp.resize(size);
@@ -580,7 +580,7 @@ struct Sapling
         cerr << "Error reading suffix array from file" << endl;
       }
           
-      // cout << "Constructing RMQ" << endl;
+      cout << "Constructing RMQ" << endl;
       if(!saplingf.good()) lsa.krmq_init(k);
 
       cout << "Loaded suffix array of size " << lsa.inv.size() << endl;
@@ -605,14 +605,14 @@ struct Sapling
     //vector<size_t>().swap(lsa.lcp);
     
     // Get the sapling data structure - either read from a file or generate it
-    // cout << "Initializing rev and sa" << endl;
+    cout << "Initializing rev and sa" << endl;
     rev = vector<size_t>(n, 0);
-    // cout << "Filling rev and sa" << endl;
+    cout << "Filling rev and sa" << endl;
     for(size_t i = 0; i<n; i++) rev[lsa.inv[i]] = i;
     
     if(saplingf.good())
     {
-      // cout << "Reading Sapling from file" << endl;
+      cout << "Reading Sapling from file" << endl;
       FILE *infile = fopen (saplingfn, "rb");
       size_t xlistsize;
       int err = fread(&buckets, sizeof(int), 1, infile);

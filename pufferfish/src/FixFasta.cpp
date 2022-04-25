@@ -33,7 +33,8 @@ bool fixFasta(single_parser* parser,
               // std::string& outputDir,
               spp::sparse_hash_set<std::string>& decoyNames,
               bool keepDuplicates, uint32_t k,
-              std::string& sepStr, std::mutex& iomutex,
+              std::string& sepStr, bool expect_transcriptome, 
+              bool noclip_polya, std::mutex& iomutex,
               std::shared_ptr<spdlog::logger> log, std::string outFile,
               std::vector<uint32_t>& refIdExtensions,
               std::vector<std::pair<std::string, uint16_t>>& shortRefs) {
@@ -61,6 +62,7 @@ bool fixFasta(single_parser* parser,
   // sequence after having observed a decoy, then we complain and exit.
   bool sawDecoy{false};
   uint64_t numberOfDecoys{0};
+  uint64_t numberOfDuplicateDecoys{0};
   uint64_t firstDecoyIndex{std::numeric_limits<uint64_t>::max()};
 
   bool firstRecord{true};
@@ -81,7 +83,7 @@ bool fixFasta(single_parser* parser,
   //using KmerBinT = uint64_t;
 
   bool haveDecoys = !decoyNames.empty();
-  bool clipPolyA = true;
+  bool clipPolyA = !(noclip_polya);
 
   struct DupInfo {
     uint64_t txId;
@@ -107,13 +109,16 @@ bool fixFasta(single_parser* parser,
     }
   };
 
-  // http://biology.stackexchange.com/questions/21329/whats-the-longest-transcript-known
-  // longest human transcript is Titin (108861), so this gives us a *lot* of
-  // leeway before
-  // we issue any warning.
-  size_t tooLong = 200000;
-  //size_t numDistinctKmers{0};
-  //size_t numKmers{0};
+  // This used to be set based on the length of Titin (108861).  But, as is almost guaranteed 
+  // with any arbitrary cutoff in code, the data will eventually prove you chose an inadequate
+  // value for some case.  The new winner for longest transcript is ENST00000674361.1
+  // weighing in at 347,561 nucleotides.  It appears in human Gencode 35 (and probably will 
+  // persist).  So, we set this value to 400000 to give some headway and avoid producing 
+  // warnings for standard human transcriptomes.  This addresses 
+  // https://github.com/COMBINE-lab/salmon/issues/591; thanks to @guidohooiveld for reporting 
+  // it.
+  constexpr size_t tooLong = 400000;
+
   size_t currIndex{0};
   size_t numDups{0};
   int64_t numShortBeforeFirstDecoy{0};
@@ -199,7 +204,6 @@ bool fixFasta(single_parser* parser,
         if (clipPolyA) {
           if (readStr.size() > polyAClipLength and
               readStr.substr(readStr.length() - polyAClipLength) == polyA) {
-
             auto newEndPos = readStr.find_last_not_of("Aa");
             // If it was all As
             if (newEndPos == std::string::npos) {
@@ -221,7 +225,7 @@ bool fixFasta(single_parser* parser,
 
           // If we're suspicious the user has fed in a *genome* rather
           // than a transcriptome, say so here.
-          if (readStr.size() >= tooLong and !isDecoy) {
+          if (readStr.size() >= tooLong and !isDecoy and expect_transcriptome) {
             log->warn("Entry with header [{}] was longer than {} nucleotides.  "
                       "This is probably a chromosome instead of a transcript.",
                       read.name, tooLong);
@@ -264,6 +268,19 @@ bool fixFasta(single_parser* parser,
             }     // for dupInfo : dupList
           }       // if we had a potential duplicate
 
+          // if this was a duplicate and a decoy sequence
+          // then we don't care about the status of the `--keepDuplicates` 
+          // flag.  It never really makes sense to keep a duplicate 
+          // decoy.
+          if (didCollide and isDecoy) {
+            // roll back the txp index & skip the rest of this loop
+            n--;
+            ++numberOfDuplicateDecoys;
+            continue;
+          }
+
+          // if this was a duplicate and not a decoy, then take proper
+          // action based on the status of `--keepDuplicates`
           if (!keepDuplicates and didCollide) {
             // roll back the txp index & skip the rest of this loop
             n--;
@@ -344,12 +361,16 @@ bool fixFasta(single_parser* parser,
     }
   }
 
-  if (numberOfDecoys != decoyNames.size()) {
+  if ((numberOfDecoys + numberOfDuplicateDecoys) != decoyNames.size()) {
     log->critical("The decoy file contained the names of {} decoy sequences, but "
     "{} were matched by sequences in the reference file provided. To prevent unintentional "
     "errors downstream, please ensure that the decoy file exactly matches with the "
     "fasta file that is being indexed.", decoyNames.size(), numberOfDecoys);
     return false;
+  }
+
+  if (numberOfDuplicateDecoys > 0) {
+    log->warn("There were {} duplicate decoy sequences.", numberOfDuplicateDecoys);
   }
 
   {
@@ -606,6 +627,8 @@ int fixFastaMain(std::vector<std::string>& args,
   std::string decoyFile;
   bool keepDuplicates{false};
   bool printHelp{false};
+  bool expect_transcriptome{false};
+  bool noclip_polya{false};
   std::string sepStr{" \t"};
 
   auto cli = (
@@ -616,6 +639,9 @@ int fixFastaMain(std::vector<std::string>& args,
               "Instead of a space or tab, break the header at the first "
               "occurrence of this string, and name the transcript as the token before "
               "the first separator (default = space & tab)",
+              option("--expectTranscriptome").set(expect_transcriptome) % 
+              "expect (non-decoy) sequences to be transcripts rather than genomic contigs",
+              option("--noClip", "-n").set(noclip_polya) % "Don't clip poly-A tails from the ends of target sequences",
               option("--decoys", "-d") & value("decoys", decoyFile) %
               "Treat these sequences as decoys that may be sequence-similar to some known indexed reference",
               option("--keepDuplicates").set(keepDuplicates) % "Retain duplicate references in the input",
@@ -657,8 +683,8 @@ int fixFastaMain(std::vector<std::string>& args,
       transcriptParserPtr.reset(new single_parser(refFiles, numThreads, numProd));
       transcriptParserPtr->start();
       std::mutex iomutex;
-      fix_ok = fixFasta(transcriptParserPtr.get(), decoyNames, keepDuplicates, k, sepStr, iomutex, log,
-                        outFile, refIdExtension, shortRefs);
+      fix_ok = fixFasta(transcriptParserPtr.get(), decoyNames, keepDuplicates, k, sepStr, expect_transcriptome, 
+                        noclip_polya, iomutex, log, outFile, refIdExtension, shortRefs);
       transcriptParserPtr->stop();
     }
 

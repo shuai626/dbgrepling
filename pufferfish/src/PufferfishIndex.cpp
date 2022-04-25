@@ -48,17 +48,15 @@ PufferfishIndex::PufferfishIndex(const std::string& indexDir, pufferfish::util::
   {
     CLI::AutoTimer timer{"Loading contig offsets", CLI::Timer::Big};
     std::string pfile = indexDir + "/" + pufferfish::util::CONTIG_OFFSETS;
-    auto bits_per_element = compact::get_bits_per_element(pfile);
-    contigOffsets_.set_m_bits(bits_per_element);
     contigOffsets_.deserialize(pfile, false);
   }
   numContigs_ = contigOffsets_.size()-1;
 
   {
     std::string rlPath = indexDir + "/" + pufferfish::util::REFLENGTH;
-    if (puffer::fs::FileExists(rlPath.c_str())) {
+    std::ifstream refLengthStream(rlPath);
+    if(refLengthStream.good()) {
       CLI::AutoTimer timer{"Loading reference lengths", CLI::Timer::Big};
-      std::ifstream refLengthStream(rlPath);
       cereal::BinaryInputArchive refLengthArchive(refLengthStream);
       refLengthArchive(refLengths_);
     } else {
@@ -68,8 +66,8 @@ PufferfishIndex::PufferfishIndex(const std::string& indexDir, pufferfish::util::
 
   {
     std::string rlPath = indexDir + "/" + pufferfish::util::COMPLETEREFLENGTH;
-    if (puffer::fs::FileExists(rlPath.c_str())) {
-      std::ifstream completeRefLengthStream(rlPath);
+    std::ifstream completeRefLengthStream(rlPath);
+    if(completeRefLengthStream.good()) {
       cereal::BinaryInputArchive completeRefLengthArchive(completeRefLengthStream);
       completeRefLengthArchive(completeRefLengths_);
     } else {
@@ -121,8 +119,6 @@ PufferfishIndex::PufferfishIndex(const std::string& indexDir, pufferfish::util::
   {
     CLI::AutoTimer timer{"Loading positions", CLI::Timer::Big};
     std::string pfile = indexDir + "/" + pufferfish::util::POS;
-    auto bits_per_element = compact::get_bits_per_element(pfile);
-    pos_.set_m_bits(bits_per_element);
     pos_.deserialize(pfile, false);
     //auto f = std::async(std::launch::async, &pos_vector_t::touch_all_pages, &pos_, bits_per_element);
   }
@@ -135,9 +131,9 @@ PufferfishIndex::PufferfishIndex(const std::string& indexDir, pufferfish::util::
 
   {
     std::string rlPath = indexDir + "/" + pufferfish::util::REFACCUMLENGTH;
-    if (puffer::fs::FileExists(rlPath.c_str())) {
+    std::ifstream refLengthStream(rlPath);
+    if(refLengthStream.good()) {
       CLI::AutoTimer timer{"Loading reference accumulative lengths", CLI::Timer::Big};
-      std::ifstream refLengthStream(rlPath);
       cereal::BinaryInputArchive refLengthArchive(refLengthStream);
       refLengthArchive(refAccumLengths_);
     } else {
@@ -150,6 +146,8 @@ PufferfishIndex::PufferfishIndex(const std::string& indexDir, pufferfish::util::
     std::string pfile = indexDir + "/" + pufferfish::util::EDGE;
     edge_.deserialize(pfile, false);
   }
+
+  firstDecoyEncodedIndex_ = (numDecoys_ > 0) ? getRefId(firstDecoyIndex_) : std::numeric_limits<decltype(firstDecoyEncodedIndex_)>::max();
 }
 
 /**
@@ -185,23 +183,28 @@ auto PufferfishIndex::getRefPos(CanonicalKmer& mer, pufferfish::util::QueryCache
     // identity, twin (i.e. rev-comp), or no match
     auto keq = mer.isEquivalent(fk);
     if (keq != KmerMatchType::NO_MATCH) {
-      // the index of this contig
-      auto rank = rankSelDict.rank(pos);//contigRank_(pos);
-      // the reference information in the contig table
-      auto contigIterRange = contigRange(rank);
-      // start position of this contig
+      uint64_t rank = 0;
       uint64_t sp = 0;
       uint64_t contigEnd = 0;
-      if (rank == qc.prevRank) {
+
+      // check if the current position is on the same contig
+      // as the cached contig or not.
+      const bool same_contig = ((qc.contigStart <= pos) and (pos <= qc.contigEnd));
+      if (same_contig) {
+        rank = qc.prevRank;
         sp = qc.contigStart;
         contigEnd = qc.contigEnd;
       } else {
+        // the index of this contig
+        rank = rankSelDict.rank(pos);
         sp = (rank == 0) ? 0 : static_cast<uint64_t>(rankSelDict.select(rank - 1)) + 1;
         contigEnd = rankSelDict.select(rank);
         qc.prevRank = rank;
         qc.contigStart = sp;
         qc.contigEnd = contigEnd;
       }
+      // the reference information in the contig table
+      auto contigIterRange = contigRange(rank);
 
       // relative offset of this k-mer in the contig
       uint32_t relPos = static_cast<uint32_t>(pos - sp);

@@ -19,10 +19,14 @@ class MemClusterer {
 private:
   uint32_t maxAllowedRefsPerHit_ = 1000;
   double consensusFraction_ = 0.65;
+  double pre_merge_chain_sub_thresh_{0.9};
+  double inv_pre_merge_chain_sub_thresh_{1.0/0.9};
+
   using RefMemMap = pufferfish::util::CachedVectorMap<std::pair<pufferfish::common_types::ReferenceID, bool>, std::vector<pufferfish::util::MemInfo>, pufferfish::util::pair_hash>;
 
 public:
-
+  void set_chain_sub_opt_thresh_(double pre_merge_chain_sub_thresh, double inv_pre_merge_chain_sub_thresh);
+  double chainSubOptThresh() const;
   void setConsensusFraction(double cf);
   double getConsensusFraction() const;
   void setMaxAllowedRefsPerHit(uint32_t max);
@@ -48,12 +52,12 @@ public:
                     bool verbose = false);
 
 private:
-  chobo::small_vector<double> f;
-  chobo::small_vector<int32_t> p;
-  chobo::small_vector<uint8_t> keepMem;
-  chobo::small_vector<uint64_t> memIndicesInReverse;
-  chobo::small_vector<int32_t> bestChainEndList;
-  chobo::small_vector<int32_t> chainQuerySig;
+  itlib::small_vector<double> f;
+  itlib::small_vector<int32_t> p;
+  itlib::small_vector<uint8_t> keepMem;
+  itlib::small_vector<uint64_t> memIndicesInReverse;
+  itlib::small_vector<int32_t> bestChainEndList;
+  itlib::small_vector<int32_t> chainQuerySig;
   pufferfish::util::HitFilterPolicy hitFilterPolicy_{pufferfish::util::HitFilterPolicy::FILTER_AFTER_CHAINING};
 };
 

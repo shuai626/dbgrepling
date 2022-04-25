@@ -92,6 +92,8 @@ void processReadsPair(paired_parser *parser,
     MemCollector<PufferfishIndexT> memCollector(&pfi);
     memCollector.configureMemClusterer(mopts->maxAllowedRefsPerHit);
     memCollector.setConsensusFraction(mopts->consensusFraction);
+    memCollector.setAltSkip(mopts->altSkip);
+    memCollector.setChainSubOptThresh(mopts->preMergeChainSubThresh);
 
     auto logger = spdlog::get("console");
     fmt::MemoryWriter sstream;
@@ -112,7 +114,7 @@ void processReadsPair(paired_parser *parser,
     pufferfish::util::QueryCache qc;
 
     //Initialize aligner ksw
-    ksw2pp::KSW2Aligner aligner(mopts->matchScore, mopts->missMatchScore);
+    ksw2pp::KSW2Aligner aligner(mopts->matchScore, mopts->mismatchScore);
     ksw2pp::KSW2Config config;
 
     config.dropoff = -1;
@@ -150,6 +152,9 @@ void processReadsPair(paired_parser *parser,
     aconf.useAlignmentCache = mopts->useAlignmentCache;
     aconf.maxFragmentLength = mopts->maxFragmentLength;
     aconf.noDovetail = mopts->noDovetail;
+    aconf.mismatchPenalty = mopts->mismatchScore;
+    aconf.bestStrata = mopts->bestStrata;
+    aconf.decoyPresent = mopts->filterGenomics or mopts->filterMicrobiom or mopts->filterMicrobiomBestScore;
 
     PuffAligner puffaligner(pfi.refseq_, pfi.refAccumLengths_, pfi.k(), aconf, aligner);
 
@@ -157,26 +162,32 @@ void processReadsPair(paired_parser *parser,
     using pufferfish::util::BestHitReferenceType;
     BestHitReferenceType bestHitRefType{BestHitReferenceType::UNKNOWN};
     BestHitReferenceType hitRefType{BestHitReferenceType::UNKNOWN};
+
     pufferfish::util::MappingConstraintPolicy mpol;
     mpol.noDiscordant = mopts->noDiscordant;
     mpol.noOrphans = mopts->noOrphan;
     mpol.noDovetail = mopts->noDovetail;
+    mpol.setPostMergeChainSubThresh(mopts->postMergeChainSubThresh);
+    mpol.setOrphanChainSubThresh(mopts->orphanChainSubThresh);
+
     uint64_t firstDecoyIndex = pfi.firstDecoyIndex();
 
     //For filtering reads
     bool verbose = mopts->verbose;
 //    auto &txpNames = pfi.getRefNames();
     uint32_t alignmentStreamLimit = mopts->alignmentStreamLimit;
-    uint32_t alignmentStreamCount{0};
+    uint32_t alignmentStreamCount{0}, chunkReads{0};
     while (parser->refill(rg)) {
         for (auto read_it = rg.begin(); read_it != rg.end(); ++read_it) {
             auto& rpair = *read_it;
             readLen = static_cast<uint32_t >(rpair.first.seq.length());
             mateLen = static_cast<uint32_t >(rpair.second.seq.length());
             totLen = readLen + mateLen;
+            bool tooShortRead = readLen < pfi.k();
+            bool tooShortMate = mateLen < pfi.k();
 
             ++hctr.numReads;
-
+            chunkReads++;
             jointHits.clear();
             leftHits.clear();
             rightHits.clear();
@@ -193,14 +204,16 @@ void processReadsPair(paired_parser *parser,
             //           rpair.second.seq == "AGCAGGAGGAGGAGGAGGAGGAGGAGGAGGAGGAGGAGGAGGTGGTGGGGGTGGTGGTGGTGGTGGTGGTGGTGGTGGTGGTGGTAGAGAGGCACCAGCA";
 
             //verbose = rpair.first.name == "mason_sample5_primary_1M_random.fasta.000050010/1";
-            bool lh = memCollector(rpair.first.seq,
-                                   qc,
-                                   true, // isLeft
-                                   verbose);
-            bool rh = memCollector(rpair.second.seq,
-                                   qc,
-                                   false, // isLeft
-                                   verbose);
+            bool lh = tooShortRead ? false :
+              memCollector(rpair.first.seq,
+                           qc,
+                           true, // isLeft
+                           verbose);
+            bool rh = tooShortMate ? false :
+              memCollector(rpair.second.seq,
+                           qc,
+                           false, // isLeft
+                           verbose);
             memCollector.findChains(rpair.first.seq,
                                    leftHits,
                                    mopts->maxSpliceGap,
@@ -235,30 +248,33 @@ void processReadsPair(paired_parser *parser,
                 ss << "\n\n";
                 std::cerr << ss.str();
             }*/
-            auto mergeRes = pufferfish::util::joinReadsAndFilter(leftHits, rightHits, jointHits,
+            if (tooShortRead and tooShortMate) {
+              ++hctr.tooShortReads;
+            } else {
+              auto mergeRes = pufferfish::util::joinReadsAndFilter(leftHits, rightHits, jointHits,
                                                                  mopts->maxFragmentLength,
                                                                  totLen,
                                                                  mopts->scoreRatio,
                                                                  firstDecoyIndex,
                                                                  mpol, hctr);
 
-            bool mergeStatusOR = (mergeRes == pufferfish::util::MergeResult::HAD_EMPTY_INTERSECTION or
+              bool mergeStatusOR = (mergeRes == pufferfish::util::MergeResult::HAD_EMPTY_INTERSECTION or
                                   mergeRes == pufferfish::util::MergeResult::HAD_ONLY_LEFT or
                                   mergeRes == pufferfish::util::MergeResult::HAD_ONLY_RIGHT);
 
-            if ( mopts->recoverOrphans and mergeStatusOR ) {
-              // TODO NOTE : do futher testing
-              bool recoveredAny = selective_alignment::utils::recoverOrphans(rpair.first.seq, rpair.second.seq, recoveredHits, jointHits, puffaligner, verbose);
-              (void)recoveredAny;
-            }
+              if (mopts->recoverOrphans and mergeStatusOR and !tooShortRead and !tooShortMate) {
+                // TODO NOTE : do futher testing
+                bool recoveredAny = selective_alignment::utils::recoverOrphans(rpair.first.seq, rpair.second.seq, recoveredHits, jointHits, puffaligner, verbose);
+                (void)recoveredAny;
+              }
 
-            hctr.peHits += jointHits.size();
+              hctr.peHits += jointHits.size();
 
 #if ALLOW_VERBOSE
-            if (verbose)
-                std::cerr<<"Number of hits: "<<jointHits.size()<<"\n";
+              if (verbose)
+                 std::cerr<<"Number of hits: "<<jointHits.size()<<"\n";
 #endif // ALLOW_VERBOSE
-
+            }
             if (!mopts->justMap) {
               puffaligner.clear();
               int32_t bestScore = invalidScore;
@@ -275,9 +291,14 @@ void processReadsPair(paired_parser *parser,
 //                std::stringstream ss;
 //                if (verbose)
 //                   ss << "\n\n found the read:\n" << rpair.first.name << " " << jointHits.size() <<"\n";
+                puffaligner.getScoreStatus().reset();
                 for (auto &&jointHit : jointHits) {
-                  auto hitScore = puffaligner.calculateAlignments(rpair.first.seq, rpair.second.seq, jointHit, hctr, isMultimapping, false);
-                  scores[idx] = hitScore;
+                    auto hitScore = puffaligner.calculateAlignments(rpair.first.seq, rpair.second.seq, jointHit, hctr, isMultimapping, verbose);
+                    if (mopts->bestStrata and hitScore != invalidScore)
+                        puffaligner.getScoreStatus().updateBest(hitScore - mopts->matchScore * std::max(rpair.first.seq.length(), rpair.second.seq.length()));
+                    if ( (mopts->filterGenomics or mopts->filterMicrobiom or mopts->filterMicrobiomBestScore) and hitScore != invalidScore)
+                        puffaligner.getScoreStatus().updateDecoy(hitScore - mopts->matchScore * std::max(rpair.first.seq.length(), rpair.second.seq.length()));
+                    scores[idx] = hitScore;
 //                    if (verbose)
 //                        ss << txpNames[jointHit.tid] << " " << jointHit.alignmentScore << " " << scores[idx] << "\n";
                     const std::string& ref_name = pfi.refName(jointHit.tid);//txpNames[jointHit.tid];
@@ -412,9 +433,9 @@ void processReadsPair(paired_parser *parser,
             }
 
             if (jointHits.size() > mopts->maxNumHits) {
-                std::sort(jointHits.begin(), jointHits.end(),
+                std::nth_element(jointHits.begin(), jointHits.begin() + mopts->maxNumHits,jointHits.end(),
                           [](const auto &lhs, const auto &rhs) {
-                              return lhs.alignmentScore < rhs.alignmentScore;
+                              return lhs.alignmentScore > rhs.alignmentScore;
                           });
                 jointHits.erase(jointHits.begin() + mopts->maxNumHits, jointHits.end());
             }
@@ -479,6 +500,9 @@ void processReadsPair(paired_parser *parser,
               } else if (mopts->salmonOut) {
                 writeAlignmentsToKrakenDump(rpair,  formatter,  jointHits, bstream, mopts->justMap, false);
                 alignmentStreamCount += jointHits.size();
+              }  else if (mopts->radOut) {
+                writeAlignmentsToRADPair(rpair,  formatter,  jointAlignments, bstream, false);
+                alignmentStreamCount += jointAlignments.size();
               } else if (jointAlignments.size() > 0) {
                 writeAlignmentsToStream(rpair, formatter, jointAlignments, sstream, !mopts->noOrphan);
                 alignmentStreamCount += jointAlignments.size();
@@ -512,6 +536,13 @@ void processReadsPair(paired_parser *parser,
                         sbw << bstream.getBytes();
                         outQueue->info("{}{}", sbw, bstream);
                     }
+                } else if (mopts->radOut) {
+                    if (bstream.getBytes() != 0) {
+                        BinWriter sbw(sizeof(uint64_t));
+                        sbw << bstream.getBytes() << chunkReads;
+                        outQueue->info("{}{}", sbw, bstream);
+                        chunkReads = 0;
+                    } 
                 } else if (mopts->krakOut) {
                     outQueue->info("{}", bstream);
                 } else {
@@ -543,6 +574,7 @@ void processReadsSingle(single_parser *parser,
     MemCollector<PufferfishIndexT> memCollector(&pfi);
     memCollector.configureMemClusterer(mopts->maxAllowedRefsPerHit);
     memCollector.setConsensusFraction(mopts->consensusFraction);
+    memCollector.setAltSkip(mopts->altSkip);
 
     using pufferfish::util::BestHitReferenceType;
     BestHitReferenceType bestHitRefType{BestHitReferenceType::UNKNOWN};
@@ -563,7 +595,7 @@ void processReadsSingle(single_parser *parser,
     std::vector<pufferfish::util::MemCluster> all;
 
     //Initialize aligner ksw
-    ksw2pp::KSW2Aligner aligner(mopts->matchScore, mopts->missMatchScore);
+    ksw2pp::KSW2Aligner aligner(mopts->matchScore, mopts->mismatchScore);
     ksw2pp::KSW2Config config;
 
     config.dropoff = -1;
@@ -591,17 +623,21 @@ void processReadsSingle(single_parser *parser,
     aconf.allowSoftclip = mopts->allowSoftclip;
     aconf.alignmentMode = mopts->noOutput or !mopts->allowSoftclip ? pufferfish::util::PuffAlignmentMode::SCORE_ONLY : pufferfish::util::PuffAlignmentMode::APPROXIMATE_CIGAR;
     aconf.useAlignmentCache = mopts->useAlignmentCache;
+    aconf.mismatchPenalty = mopts->mismatchScore;
+    aconf.bestStrata = mopts->bestStrata;
+    aconf.decoyPresent = mopts->filterGenomics or mopts->filterMicrobiom or mopts->filterMicrobiomBestScore;
 
     PuffAligner puffaligner(pfi.refseq_, pfi.refAccumLengths_, pfi.k(), aconf, aligner);
 
     uint32_t alignmentStreamLimit = mopts->alignmentStreamLimit;
-    uint32_t alignmentStreamCount{0};
+    uint32_t alignmentStreamCount{0}, chunkReads{0};
 
     auto rg = parser->getReadGroup();
     while (parser->refill(rg)) {
         for (auto read_it = rg.begin(); read_it != rg.end(); ++read_it) {
             auto& read = *read_it;
             readLen = static_cast<uint32_t >(read.seq.length());
+            bool tooShortRead = readLen < pfi.k();
             auto totLen = readLen;
             bool verbose = false;
             //if (verbose) std::cerr << read.name << "\n";
@@ -615,10 +651,11 @@ void processReadsSingle(single_parser *parser,
             bool filterGenomics = mopts->filterGenomics;
             bool filterMicrobiom = mopts->filterMicrobiom;
 
-            bool lh = memCollector(read.seq,
-                                   qc,
-                                   true, // isLeft
-                                   verbose);
+            bool lh = tooShortRead? false :
+              memCollector(read.seq,
+                           qc,
+                           true, // isLeft
+                           verbose);
             memCollector.findChains(read.seq,
                                    leftHits,
                                    mopts->maxSpliceGap,
@@ -629,9 +666,13 @@ void processReadsSingle(single_parser *parser,
 
             (void) lh;
             all.clear();
-            pufferfish::util::joinReadsAndFilterSingle(leftHits, jointHits,
+            if (tooShortRead) {
+              ++hctr.tooShortReads;
+            } else {
+              pufferfish::util::joinReadsAndFilterSingle(leftHits, jointHits,
                                      totLen,
                                      mopts->scoreRatio);
+            }
 
             std::vector<QuasiAlignment> jointAlignments;
             std::vector<std::pair<uint32_t, std::vector<pufferfish::util::MemCluster>::iterator>> validHits;
@@ -649,8 +690,11 @@ void processReadsSingle(single_parser *parser,
                 if (!mopts->genomicReads) { bestScorePerTranscript.clear(); }
                 bestHitRefType = BestHitReferenceType::UNKNOWN;
                 bool isMultimapping = (jointHits.size() > 1);
+                puffaligner.getScoreStatus().reset();
                 for (auto &jointHit : jointHits) {
-                  int32_t hitScore = puffaligner.calculateAlignments(read.seq, jointHit, hctr, isMultimapping, verbose);
+                    int32_t hitScore = puffaligner.calculateAlignments(read.seq, jointHit, hctr, isMultimapping, verbose);
+                    if (mopts->bestStrata) puffaligner.getScoreStatus().updateBest(hitScore);
+                    if (mopts->filterGenomics or mopts->filterMicrobiom or mopts->filterMicrobiomBestScore) puffaligner.getScoreStatus().updateDecoy(hitScore);
                     scores[idx] = hitScore;
 
                     const std::string& ref_name = pfi.refName(jointHit.tid);//txpNames[jointHit.tid];
@@ -731,9 +775,9 @@ void processReadsSingle(single_parser *parser,
             }
 
             if (jointHits.size() > mopts->maxNumHits) {
-                std::sort(jointHits.begin(), jointHits.end(),
+                std::nth_element(jointHits.begin(), jointHits.begin() + mopts->maxNumHits,jointHits.end(),
                           [](const auto &lhs, const auto &rhs) {
-                              return lhs.alignmentScore < rhs.alignmentScore;
+                              return lhs.alignmentScore > rhs.alignmentScore;
                           });
                 jointHits.erase(jointHits.begin() + mopts->maxNumHits, jointHits.end());
             }
@@ -778,6 +822,10 @@ void processReadsSingle(single_parser *parser,
               writeAlignmentsToKrakenDump(read, formatter,
                                             validHits, bstream, false);
               alignmentStreamCount += validHits.size();
+            } else if (mopts->radOut) {
+              writeAlignmentsToRADSingle(read, formatter,
+                                            jointAlignments, bstream, false);
+              alignmentStreamCount += validHits.size();
             } else if (jointHits.size() > 0 and !mopts->noOutput) {
                 // write sam output for mapped reads
                 writeAlignmentsToStreamSingle(read, formatter, jointAlignments, sstream, !mopts->noOrphan);
@@ -789,7 +837,7 @@ void processReadsSingle(single_parser *parser,
             }
 
             // write them on cmd
-            if (hctr.numReads > hctr.lastPrint + 1000000) {
+            if (hctr.numReads > hctr.lastPrint + 100000) {
                 hctr.lastPrint.store(hctr.numReads.load());
                 if (!mopts->quiet and iomutex->try_lock()) {
                     if (hctr.numReads > 0) {
@@ -813,6 +861,16 @@ void processReadsSingle(single_parser *parser,
                         BinWriter sbw(64);
                         sbw << bstream.getBytes();
                         outQueue->info("{}{}", sbw, bstream);
+                    } else if (mopts->krakOut) {
+                        outQueue->info("{}", bstream);
+                    }
+                    bstream.clear();
+                } else if (mopts->radOut) {
+                    if (mopts->salmonOut && bstream.getBytes() > 0) {
+                        BinWriter sbw(64);
+                        sbw << bstream.getBytes() << chunkReads;
+                        outQueue->info("{}{}", sbw, bstream);
+                        chunkReads = 0;
                     } else if (mopts->krakOut) {
                         outQueue->info("{}", bstream);
                     }
@@ -903,6 +961,7 @@ void printAlignmentSummary(HitCounters &hctrs, std::shared_ptr<spdlog::logger> c
     consoleLog->info("\n\n");
     consoleLog->info("=====");
     consoleLog->info("Observed {} reads", hctrs.numReads);
+    consoleLog->info("Number of reads totally discarded for being smaller than k: {} read", hctrs.tooShortReads);
     consoleLog->info("Rate of Fragments with at least one found k-mer: {:03.2f}%",
                      (100.0 * static_cast<float>(hctrs.numMappedAtLeastAKmer)) / hctrs.numReads);
     consoleLog->info("Discordant Rate: {:03.2f}%",
@@ -919,6 +978,7 @@ void printAlignmentSummary(HitCounters &hctrs, std::shared_ptr<spdlog::logger> c
     consoleLog->info("Total number of alignment attempts : {}", hctrs.totalAlignmentAttempts);
     consoleLog->info("Number of skipped alignments because of cache hits : {}", hctrs.skippedAlignments_byCache);
     consoleLog->info("Number of skipped alignments because of perfect chains : {}", hctrs.skippedAlignments_byCov);
+    consoleLog->info("Number of alignments calculations skipped by non-alignable: {}", hctrs.skippedAlignments_notAlignable);
 
     consoleLog->info("Number of cigar strings which are fixed: {}", hctrs.cigar_fixed_count);
     consoleLog->info("=====");
@@ -993,7 +1053,7 @@ bool alignReads(
         size_t queueSize{2*mopts->numThreads};
         spdlog::set_async_mode(queueSize);
 
-        if (mopts->krakOut || mopts->salmonOut) {
+        if (mopts->krakOut || mopts->salmonOut || mopts->radOut) {
             auto outputSink = std::make_shared<ostream_bin_sink_mt>(*outStream);
             outLog = std::make_shared<spdlog::logger>("puffer::outLog", outputSink);
             outLog->set_pattern("");
@@ -1003,8 +1063,10 @@ bool alignReads(
             outLog->set_pattern("%v");
         }
         // write the SAM Header
-        // If nothing gets printed by this time we are in trouble
-        if (mopts->krakOut || mopts->salmonOut) {
+        // If nothing gets printed by this time we are in troubleR
+        if (mopts->radOut) {
+            writeRADHeader(pfi, outLog, mopts);
+        } else if (mopts->krakOut || mopts->salmonOut) {
             writeKrakOutHeader(pfi, outLog, mopts);
         } else { //TODO do we need to remove the txp from the list? The ids are then invalid
             writeSAMHeader(pfi, outLog,
@@ -1071,15 +1133,30 @@ bool alignReadsWrapper(
         pufferfish::AlignmentOpts *mopts) {
     bool res = true;
     if (mopts->listOfReads) {
+        uint64_t readCntr = 1;
         if (mopts->singleEnd) {
             std::string unmatedReadsFile = mopts->unmatedReads;
             std::ifstream unmatedReadsF(unmatedReadsFile);
-            while (unmatedReadsF.good()) {
-                unmatedReadsF >> mopts->unmatedReads;
+            std::string outname = mopts->outname;
+            unmatedReadsF >> mopts->unmatedReads;
+            while (unmatedReadsF.good() and mopts->unmatedReads != "") {
+                consoleLog->info("Read {}: {}", readCntr, mopts->unmatedReads);
+                readCntr++;
                 uint64_t start = mopts->unmatedReads.find_last_of('/');
+                if (start == std::string::npos) {
+                    start = 0;
+                } else {
+                    start += 1;
+                }
                 uint64_t end = mopts->unmatedReads.find_last_of('.');
-                mopts->outname += mopts->unmatedReads.substr(start + 1, end - start - 1);
+                mopts->outname = outname + mopts->unmatedReads.substr(start, end - start);
+                if (mopts->salmonOut) {
+                    mopts->outname += ".pam";
+                } else {
+                    mopts->outname += ".sam";
+                }
                 res &= alignReads(pfi, consoleLog, mopts);
+                unmatedReadsF >> mopts->unmatedReads;
             }
         } else {
             std::string readFile1 = mopts->read1;
@@ -1087,16 +1164,32 @@ bool alignReadsWrapper(
             std::ifstream readF1(readFile1);
             std::ifstream readF2(readFile2);
             std::string outname = mopts->outname;
-            while (readF1.good() and readF2.good()) {
+            readF1 >> mopts->read1;
+            readF2 >> mopts->read2;
+            while (readF1.good() and readF2.good() and mopts->read1 != "" and mopts->read2 != "") {
+                consoleLog->info("Read Pair {}: {}, {}", readCntr, mopts->read1, mopts->read2);
+                readCntr++;
+                uint64_t start = mopts->read1.find_last_of('/');
+                if (start == std::string::npos) {
+                    start = 0; // if / not found, start from index 0 of read name
+                } else {
+                    start+=1; // if / found, start the output file name from the index after /
+                }
+                uint64_t end = mopts->read1.find_last_of('.');
+                if (end-2 == start) {
+                    end-=1; // for the very rare names such as r1.fastq and r2.fastq
+                } else {
+                    end-=2; // otherwise, don't worry about the one last character missing for cases such as read1.fastq
+                }
+                mopts->outname = outname + mopts->read1.substr(start, end - start);
+                if (mopts->salmonOut) {
+                    mopts->outname += ".pam";
+                } else {
+                    mopts->outname += ".sam";
+                }
+                res &= alignReads(pfi, consoleLog, mopts);
                 readF1 >> mopts->read1;
                 readF2 >> mopts->read2;
-                uint64_t start = mopts->read1.find_last_of('/');
-                uint64_t end = mopts->read1.find_last_of('_');
-                mopts->outname = outname + mopts->read1.substr(start + 1, end - start - 1);
-//                std::cerr << mopts->read1 << "\n";
-//                std::cerr << mopts->read2 << "\n";
-//                std::cerr << mopts->outname << "\n";
-                res &= alignReads(pfi, consoleLog, mopts);
             }
         }
     } else res &= alignReads(pfi, consoleLog, mopts);

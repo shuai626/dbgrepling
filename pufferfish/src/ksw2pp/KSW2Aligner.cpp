@@ -1,4 +1,5 @@
 #include "ksw2pp/KSW2Aligner.hpp"
+#include <limits>
 #include <iostream>
 
 /*
@@ -19,6 +20,8 @@ namespace ksw2pp {
 #define SIMD_AVX2    0x80
 #define SIMD_AVX512F 0x100
 
+#ifdef KSW_USE_ARM
+#else
 #ifndef _MSC_VER
 // adapted from https://github.com/01org/linux-sgx/blob/master/common/inc/internal/linux/cpuid_gnu.h
 void __cpuidex(int cpuid[4], int func_id, int subfunc_id)
@@ -56,6 +59,7 @@ int x86_simd(void)
 	}
 	return flag;
 }
+#endif // KSW_USE_ARM
 // end of ksw2_dispatch.c here
 
 unsigned char seq_nt4_table_loc[256] = {
@@ -72,34 +76,46 @@ unsigned char seq_nt4_table_loc[256] = {
     4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4};
 
   KSW2Aligner::KSW2Aligner(int8_t match, int8_t mismatch) {
-  unsigned int simd = x86_simd();
-  haveSSE41 = (simd & SIMD_SSE4_1);
-  haveSSE2 = (simd & SIMD_SSE2);
-  query_.clear();
-  target_.clear();
-  kalloc_allocator_.reset(km_init());
-  int a = match;
-  int b = mismatch;
-  int m = 5;
-  int i, j;
-  // use the ``simple'' scoring matrix for now.
-  mat_.resize(m * m);
+    #ifdef KSW_USE_ARM
+    haveSSE41 = true;
+    haveSSE2 = true;
+    #else
+    unsigned int simd = x86_simd();
+    haveSSE41 = (simd & SIMD_SSE4_1);
+    haveSSE2 = (simd & SIMD_SSE2);
+    #endif // KSW_USE_ARM
+    query_.clear();
+    target_.clear();
+    kalloc_allocator_.reset(km_init());
+    int a = match;
+    int b = mismatch;
+    int m = 5;
+    int i, j;
+    // use the ``simple'' scoring matrix for now.
+    mat_.resize(m * m);
 
-  a = a < 0 ? -a : a;
-  b = b > 0 ? -b : b;
-  for (i = 0; i < m - 1; ++i) {
-    for (j = 0; j < m - 1; ++j)
-      mat_[i * m + j] = i == j ? a : b;
-    mat_[i * m + m - 1] = 0;
-  }
-  for (j = 0; j < m; ++j)
-    mat_[(m - 1) * m + j] = 0;
+    a = a < 0 ? -a : a;
+    b = b > 0 ? -b : b;
+    for (i = 0; i < m - 1; ++i) {
+      for (j = 0; j < m - 1; ++j)
+        mat_[i * m + j] = i == j ? a : b;
+      mat_[i * m + m - 1] = 0;
+    }
+    for (j = 0; j < m; ++j) {
+      mat_[(m - 1) * m + j] = 0;
+    }
 }
 
 KSW2Aligner::KSW2Aligner(std::vector<int8_t> mat) {
-  unsigned int simd = x86_simd();
-  haveSSE41 = (simd & SIMD_SSE4_1);
-  haveSSE2 = (simd & SIMD_SSE2);
+    #ifdef KSW_USE_ARM
+    haveSSE41 = true;
+    haveSSE2 = true;
+    #else
+    unsigned int simd = x86_simd();
+    haveSSE41 = (simd & SIMD_SSE4_1);
+    haveSSE2 = (simd & SIMD_SSE2);
+    #endif // KSW_USE_ARM
+
   query_.clear();
   target_.clear();
   kalloc_allocator_.reset(km_init());
@@ -207,6 +223,7 @@ int KSW2Aligner::operator()(const char* const queryOriginal,
                             const int queryLength,
                             const char* const targetOriginal,
                             const int targetLength, ksw_extz_t* ez,
+                            int cutoff,
                             EnumToType<KSW2AlignmentType::EXTENSION>) {
   // NOTE: all ksw extension aligner calls clear out ez 
   // *internally*.  This is why we do not need to (and do not)
@@ -225,11 +242,11 @@ int KSW2Aligner::operator()(const char* const queryOriginal,
   if (haveSSE41) {
     ksw_extz2_sse41(kalloc_allocator_.get(), qlen, query_.data(), tlen,
                 target_.data(), config_.alphabetSize, mat_.data(), q, e, w, z,
-                config_.end_bonus, config_.flag, ez);
+                config_.end_bonus, config_.flag, ez, cutoff);
   } else if (haveSSE2) {
     ksw_extz2_sse2(kalloc_allocator_.get(), qlen, query_.data(), tlen,
                   target_.data(), config_.alphabetSize, mat_.data(), q, e, w, z,
-                  config_.end_bonus, config_.flag, ez);
+                  config_.end_bonus, config_.flag, ez, cutoff);
   } else {
     std::abort();
   }
@@ -242,7 +259,7 @@ int KSW2Aligner::operator()(const char* const queryOriginal,
                             const int targetLength,
                             EnumToType<KSW2AlignmentType::EXTENSION>) {
   return this->operator()(queryOriginal, queryLength, targetOriginal,
-                          targetLength, &result_,
+                          targetLength, &result_, std::numeric_limits<int>::min(),
                           EnumToType<KSW2AlignmentType::EXTENSION>());
 }
 
@@ -254,7 +271,7 @@ int KSW2Aligner::operator()(const char* const queryOriginal,
   switch (config_.atype) {
   case KSW2AlignmentType::EXTENSION:
     ret = this->operator()(queryOriginal, queryLength, targetOriginal,
-                           targetLength, &result_,
+                           targetLength, &result_, std::numeric_limits<int>::min(),
                            EnumToType<KSW2AlignmentType::EXTENSION>());
     break;
   case KSW2AlignmentType::GLOBAL:
@@ -341,7 +358,7 @@ int KSW2Aligner::operator()(const uint8_t* const query_, const int queryLength,
   int ret{0};
   switch (config_.atype) {
   case KSW2AlignmentType::EXTENSION:
-    ret = this->operator()(query_, queryLength, target_, targetLength, &result_,
+    ret = this->operator()(query_, queryLength, target_, targetLength, &result_, std::numeric_limits<int>::min(),
                            EnumToType<KSW2AlignmentType::EXTENSION>());
     break;
   case KSW2AlignmentType::GLOBAL:
@@ -354,7 +371,7 @@ int KSW2Aligner::operator()(const uint8_t* const query_, const int queryLength,
 
 int KSW2Aligner::operator()(const uint8_t* const query_, const int queryLength,
                             const uint8_t* const target_,
-                            const int targetLength, ksw_extz_t* ez,
+                            const int targetLength, ksw_extz_t* ez, int cutoff,
                             EnumToType<KSW2AlignmentType::EXTENSION>) {
   // NOTE: all ksw extension aligner calls clear out ez 
   // *internally*.  This is why we do not need to (and do not)
@@ -370,11 +387,11 @@ int KSW2Aligner::operator()(const uint8_t* const query_, const int queryLength,
   if (haveSSE41) {
     ksw_extz2_sse41(kalloc_allocator_.get(), qlen, query_, tlen, target_,
                 config_.alphabetSize, mat_.data(), q, e, w, z, config_.end_bonus, config_.flag,
-                ez);
+                ez, cutoff);
   } else if (haveSSE2) {
     ksw_extz2_sse2(kalloc_allocator_.get(), qlen, query_, tlen, target_,
                   config_.alphabetSize, mat_.data(), q, e, w, z, config_.end_bonus, config_.flag,
-                  ez);
+                  ez, cutoff);
   } else {
     std::abort();
   }
@@ -385,7 +402,7 @@ int KSW2Aligner::operator()(const uint8_t* const query_, const int queryLength,
                             const uint8_t* const target_,
                             const int targetLength,
                             EnumToType<KSW2AlignmentType::EXTENSION>) {
-  return this->operator()(query_, queryLength, target_, targetLength, &result_,
+  return this->operator()(query_, queryLength, target_, targetLength, &result_, std::numeric_limits<int>::min(),
                           EnumToType<KSW2AlignmentType::EXTENSION>());
 }
 

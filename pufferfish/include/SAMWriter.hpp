@@ -9,6 +9,7 @@
 #include "BinWriter.hpp"
 #include "parallel_hashmap/phmap.h"
 #include "nonstd/string_view.hpp"
+#include "BulkChunk.hpp"
 
 typedef uint16_t rLenType;
 typedef uint32_t refLenType;
@@ -89,7 +90,20 @@ inline void getSamFlags(const pufferfish::util::QuasiAlignment& qaln, bool peInp
 }
 
 template <typename IndexT>
-inline void writeKrakOutHeader(IndexT& pfi, std::shared_ptr<spdlog::logger> out, pufferfish::AlignmentOpts* mopts) {
+inline void writeRADHeader(IndexT& pfi, std::shared_ptr<spdlog::logger> out, pufferfish::AlignmentOpts* mopts) {
+  writeKrakOutHeader(pfi, out, mopts, true);
+  BulkTags bt(!mopts->singleEnd);
+  auto bwOut = bt.export2Buffer();
+  // bwOut << !mopts->noOrphan;
+  // bwOut << !mopts->noDiscordant;
+  // bwOut << !mopts->noDovetail;
+  out->info("{}", bwOut);
+}
+
+
+
+template <typename IndexT>
+inline void writeKrakOutHeader(IndexT& pfi, std::shared_ptr<spdlog::logger> out, pufferfish::AlignmentOpts* mopts, bool isRad=false) {
   BinWriter bw(100000);
   bw << !mopts->singleEnd; // isPaired (bool)
   auto& txpNames = pfi.getFullRefNames();
@@ -103,6 +117,9 @@ inline void writeKrakOutHeader(IndexT& pfi, std::shared_ptr<spdlog::logger> out,
   for (size_t i = 0; i < numRef; ++i) {
     bw << txpNames[i] << txpLens[i]; //txpName (string) , txpLength (size_t)
   }
+  if (isRad) { // number of chunks
+      bw << static_cast<uint64_t>(10);
+  }
   out->info("{}",bw);
 }
 
@@ -114,10 +131,17 @@ inline void writeSAMHeader(IndexT& pfi, std::shared_ptr<spdlog::logger> out) {
 
   auto& txpNames = pfi.getFullRefNames();
   auto& txpLens = pfi.getFullRefLengthsComplete();
+  auto& txpLensTrimmed = pfi.getFullRefLengths();
 
+  auto k = pfi.k();
+  int64_t numShort{0};
   auto numRef = txpNames.size();
   for (size_t i = 0; i < numRef; ++i) {
-    hd.write("@SQ\tSN:{}\tLN:{:d}\n", txpNames[i], txpLens[i]);
+    bool isShort = txpLensTrimmed[i] <= k;
+    bool isDecoy = pfi.isDecoy(i - numShort);
+    char refType = isDecoy ? 'D' : 'T';
+    hd.write("@SQ\tSN:{}\tLN:{:d}\tDS:{}\n", txpNames[i], txpLens[i], refType);
+    numShort += isShort ? 1 : 0;
   }
   // Eventually output a @PG line
   hd.write("@PG\tID:pufferfish\tPN:pufferfish\tVN:{}\n", pufferfish::version);
@@ -135,11 +159,19 @@ inline void writeSAMHeader(IndexT& pfi, std::ostream& outStream) {
 
   auto& txpNames = pfi.getFullRefNames();
   auto& txpLens = pfi.getFullRefLengthsComplete();
+  auto& txpLensTrimmed = pfi.getFullRefLengths();
 
+  auto k = pfi.k();
+  int64_t numShort{0};
   auto numRef = txpNames.size();
   for (size_t i = 0; i < numRef; ++i) {
-    hd.write("@SQ\tSN:{}\tLN:{:d}\n", txpNames[i], txpLens[i]);
+    bool isShort = txpLensTrimmed[i] <= k;
+    bool isDecoy = pfi.isDecoy(i - numShort);
+    char refType = isDecoy ? 'D' : 'T';
+    hd.write("@SQ\tSN:{}\tLN:{:d}\tDS:{}\n", txpNames[i], txpLens[i], refType);
+    numShort += isShort ? 1 : 0;
   }
+
   // Eventually output a @PG line
   hd.write("@PG\tID:pufferfish\tPN:pufferfish\tVN:{}\n", pufferfish::version);
   outStream << hd.str();
@@ -155,17 +187,24 @@ inline void writeSAMHeader(IndexT& pfi, std::shared_ptr<spdlog::logger> out,
 
   auto& txpNames = pfi.getFullRefNames();
   auto& txpLens = pfi.getFullRefLengthsComplete();
+  auto& txpLensTrimmed = pfi.getFullRefLengths();
 
+  auto k = pfi.k();
+  int64_t numShort{0};
   auto numRef = txpNames.size();
 
   // for now go with constant length
   // TODO read reference information
   // while reading the index
   for (size_t i = 0; i < numRef; ++i) {
+    bool isShort = txpLensTrimmed[i] <= k;
+    bool isDecoy = pfi.isDecoy(i - numShort);
+    char refType = isDecoy ? 'D' : 'T';
+    numShort += isShort ? 1 : 0;
     if (filterGenomics and
     (gene_names.find(txpNames[i]) != gene_names.end() or rrna_names.find(txpNames[i]) != rrna_names.end()))
       continue; 
-    hd.write("@SQ\tSN:{}\tLN:{:d}\n", txpNames[i], txpLens[i]);
+    hd.write("@SQ\tSN:{}\tLN:{:d}\tDS:{}\n", txpNames[i], txpLens[i], refType);
   }
   // Eventually output a @PG line
   // some other version number for now,
@@ -224,6 +263,113 @@ inline void adjustOverhang(pufferfish::util::QuasiAlignment& qa, uint32_t txpLen
     cigarStr1.clear();
     cigarStr1.write("{}S", qa.readLen);
   }
+}
+
+
+
+// Write alignments in RAD format
+// dump paired end read
+template <typename ReadT , typename IndexT >
+inline uint32_t writeAlignmentsToRADSingle(ReadT& r, PairedAlignmentFormatter<IndexT>& formatter,
+    std::vector<pufferfish::util::QuasiAlignment>& jointHits, BinWriter& bstream, 
+    bool tidsAlreadyDecoded = false) {
+
+  auto& cigarStr = formatter.cigarStr1;
+
+  auto &readName = r.name;
+  //std::cout << readName << " || ";
+  // If the read name contains multiple space-separated parts,
+  // print only the first
+  size_t nameLen = readName.length();
+  size_t splitPos = readName.find(' ');
+  if (splitPos < readName.length()) {
+    readName[splitPos] = '\0';
+    nameLen = splitPos;
+  } else {
+    splitPos = readName.length();
+  } 
+  if (splitPos > 2 and readName[splitPos - 2] == '/') {
+    readName[splitPos - 2] = '\0';
+    nameLen = splitPos - 2;
+  }
+  bstream << stx::string_view(readName.data(), nameLen)
+          << static_cast<uint32_t>(jointHits.size())
+          << static_cast<rLenType>(r.seq.length()); 
+  // auto& fullRefNames = formatter.index->getFullRefNames();
+  auto& fullRefLengths = formatter.index->getFullRefLengths();
+  for (auto& qa : jointHits) {
+    
+    uint64_t encodedID = tidsAlreadyDecoded ? qa.tid : formatter.index->getRefId(qa.tid);
+    // auto& refName = fullRefNames[encodedID];
+    uint32_t txpLen = fullRefLengths[encodedID];
+    // char alnType = formatter.index->isDecoyEncodedIndex(encodedID) ? 'D' : 'T';
+
+    // === SAM
+    adjustOverhang(qa.pos, qa.readLen, txpLen, cigarStr);
+    bstream   << static_cast<uint32_t>(encodedID)
+              << qa.pos + 1
+              << qa.fwd
+              << (qa.cigar.empty() ? cigarStr.c_str() : qa.cigar)  
+              << qa.score;
+    adjustOverhang(qa.matePos, qa.mateLen, txpLen, cigarStr);
+    bstream   << qa.matePos + 1
+              << qa.mateIsFwd
+              << (qa.mateCigar.empty() ? cigarStr.c_str() : qa.mateCigar)  
+              << qa.mateScore;
+  }
+  return 0;
+}
+
+template <typename ReadPairT, typename IndexT>
+inline uint32_t writeAlignmentsToRADPair(ReadPairT& r, PairedAlignmentFormatter<IndexT>& formatter,
+    std::vector<pufferfish::util::QuasiAlignment>& jointHits, BinWriter& bstream, 
+    bool tidsAlreadyDecoded = false) {
+
+  auto& cigarStr = formatter.cigarStr1;
+
+  auto &readName = r.first.name;
+  //std::cout << readName << " || ";
+  // If the read name contains multiple space-separated parts,
+  // print only the first
+  size_t nameLen = readName.length();
+  size_t splitPos = readName.find(' ');
+  if (splitPos < readName.length()) {
+    readName[splitPos] = '\0';
+    nameLen = splitPos;
+  } else {
+    splitPos = readName.length();
+  } 
+  if (splitPos > 2 and readName[splitPos - 2] == '/') {
+    readName[splitPos - 2] = '\0';
+    nameLen = splitPos - 2;
+  }
+  bstream << stx::string_view(readName.data(), nameLen)
+          << static_cast<uint32_t>(jointHits.size())
+          << static_cast<rLenType>(r.first.seq.length())
+          << static_cast<rLenType>(r.second.seq.length()); 
+  // auto& fullRefNames = formatter.index->getFullRefNames();
+  auto& fullRefLengths = formatter.index->getFullRefLengths();
+  for (auto& qa : jointHits) {
+    
+    uint64_t encodedID = tidsAlreadyDecoded ? qa.tid : formatter.index->getRefId(qa.tid);
+    // auto& refName = fullRefNames[encodedID];
+    uint32_t txpLen = fullRefLengths[encodedID];
+    // char alnType = formatter.index->isDecoyEncodedIndex(encodedID) ? 'D' : 'T';
+
+    // === SAM
+    adjustOverhang(qa.pos, qa.readLen, txpLen, cigarStr);
+    bstream   << static_cast<uint32_t>(encodedID)
+              << qa.pos + 1
+              << qa.fwd
+              << (qa.cigar.empty() ? cigarStr.c_str() : qa.cigar)  
+              << qa.score;
+    adjustOverhang(qa.matePos, qa.mateLen, txpLen, cigarStr);
+    bstream   << qa.matePos + 1
+              << qa.mateIsFwd
+              << (qa.mateCigar.empty() ? cigarStr.c_str() : qa.mateCigar)  
+              << qa.mateScore;
+  }
+  return 0;
 }
 
 // dump paired end read
@@ -415,6 +561,7 @@ inline uint32_t writeUnalignedPairToStream(fastx_parser::ReadPair& r,
                 << "*\t"                // QUAL
                 << "NH:i:0\t"
                 << "HI:i:0\t"
+                << "XT:A:N\t"
                 << "AS:i:0\n";
 
         sstream << mateNameView << '\t' // QNAME
@@ -430,6 +577,7 @@ inline uint32_t writeUnalignedPairToStream(fastx_parser::ReadPair& r,
                 << "*\t"                // QUAL
                 << "NH:i:0\t"
                 << "HI:i:0\t"
+                << "XT:A:N\t"
                 << "AS:i:0\n";
         return 0;
       }
@@ -461,6 +609,7 @@ inline uint32_t writeUnalignedSingleToStream(fastx_parser::ReadSeq& r,
                 << "*\t"            // QSTR
                 << "NH:i:0\t"
                 << "HI:i:0\t"
+                << "XT:A:N\t"
                 << "AS:i:0\n";
         return 0;
       }
@@ -493,12 +642,15 @@ inline uint32_t writeAlignmentsToStreamSingle(
   bool haveRev{false};
   size_t i{0};
 
-  auto* fullRefNames = tidsAlreadyDecoded ? &formatter.index->getFullRefNames() : nullptr;
-  auto* fullRefLengths = tidsAlreadyDecoded ? &formatter.index->getFullRefLengths() : nullptr;
+  auto& fullRefNames = formatter.index->getFullRefNames();
+  auto& fullRefLengths = formatter.index->getFullRefLengths();
   for (auto& qa : jointHits) {
     ++i;
-    auto& refName = tidsAlreadyDecoded ? (*fullRefNames)[qa.tid] : formatter.index->refName(qa.tid);
-    uint32_t txpLen = tidsAlreadyDecoded ? (*fullRefLengths)[qa.tid] : formatter.index->refLength(qa.tid);
+    uint64_t encodedID = tidsAlreadyDecoded ? qa.tid : formatter.index->getRefId(qa.tid);
+    auto& refName = fullRefNames[encodedID];
+    uint32_t txpLen = fullRefLengths[encodedID];
+    char alnType = formatter.index->isDecoyEncodedIndex(encodedID) ? 'D' : 'T';
+
     // === SAM
       getSamFlags(qa, flags);
       if (alnCtr != 0) {
@@ -532,6 +684,7 @@ inline uint32_t writeAlignmentsToStreamSingle(
               << "*\t" // QSTR
               << numHitFlag << '\t'
               << "HI:i:" << i << '\t'
+              << "XT:A:" << alnType << '\t'
               << "AS:i:" << qa.score << '\n';
     ++alnCtr;
   }
@@ -542,8 +695,7 @@ template <typename ReadPairT, typename IndexT>
 inline uint32_t writeAlignmentsToStream(
     ReadPairT& r, PairedAlignmentFormatter<IndexT>& formatter,
     std::vector<pufferfish::util::QuasiAlignment>& jointHits, fmt::MemoryWriter& sstream,
-    bool writeOrphans,
-    bool tidsAlreadyDecoded = false) {
+    bool writeOrphans, bool tidsAlreadyDecoded = false, const std::string& extraBAMtags = "") {
 
   auto& read1Temp = formatter.read1Temp;
   auto& read2Temp = formatter.read2Temp;
@@ -588,13 +740,15 @@ inline uint32_t writeAlignmentsToStream(
   bool* haveRev = nullptr;
   size_t i{0};
 
-  auto* fullRefNames = tidsAlreadyDecoded ? &formatter.index->getFullRefNames() : nullptr;
-  auto* fullRefLengths = tidsAlreadyDecoded ? &formatter.index->getFullRefLengths() : nullptr;
-
+  auto& fullRefNames = formatter.index->getFullRefNames();
+  auto& fullRefLengths = formatter.index->getFullRefLengths();
   for (auto& qa : jointHits) {
     ++i;
-    auto& refName = tidsAlreadyDecoded ? (*fullRefNames)[qa.tid] : formatter.index->refName(qa.tid);
-    uint32_t txpLen = tidsAlreadyDecoded ? (*fullRefLengths)[qa.tid] : formatter.index->refLength(qa.tid);
+    uint64_t encodedID = tidsAlreadyDecoded ? qa.tid : formatter.index->getRefId(qa.tid);
+    auto& refName = fullRefNames[encodedID];
+    uint32_t txpLen = fullRefLengths[encodedID];
+    char alnType = formatter.index->isDecoyEncodedIndex(encodedID) ? 'D' : 'T';
+
     // === SAM
     if (qa.isPaired) {
       getSamFlags(qa, true, flags1, flags2);
@@ -657,7 +811,12 @@ inline uint32_t writeAlignmentsToStream(
               << "*\t"                                       // QUAL
               << numHitFlag << '\t'
               << "HI:i:" << i << '\t'
-              << "AS:i:" << qa.score << '\n';
+              << "XT:A:" << alnType << '\t'
+              << "AS:i:" << qa.score;
+      if(!extraBAMtags.empty()) {
+        sstream << extraBAMtags;
+      }
+      sstream << '\n';
 
       sstream << mateNameView << '\t'                    // QNAME
               //<< qa.numHits << '\t'
@@ -675,7 +834,12 @@ inline uint32_t writeAlignmentsToStream(
               << "*\t"                                       // QUAL
               << numHitFlag << '\t'
               << "HI:i:" << i << '\t'
-              << "AS:i:" << qa.mateScore << '\n';
+              << "XT:A:" << alnType << '\t'
+              << "AS:i:" << qa.mateScore;
+      if(!extraBAMtags.empty()) {
+        sstream << extraBAMtags;
+      }
+      sstream << '\n';
     } else if(writeOrphans) {
 		//added orphan support
 	  //std::cerr<<"orphans here";
@@ -762,7 +926,12 @@ inline uint32_t writeAlignmentsToStream(
               << "*\t"                                       // QUAL
               << numHitFlag << '\t'
               << "HI:i:" << i << '\t'
-              << "AS:i:" << qa.score << '\n';
+              << "XT:A:" << alnType << '\t'
+              << "AS:i:" << qa.score;
+      if(!extraBAMtags.empty()) {
+        sstream << extraBAMtags;
+      }
+      sstream << '\n';
 
 
       sstream << *(unalignedName) << '\t'                    // QNAME
@@ -778,8 +947,12 @@ inline uint32_t writeAlignmentsToStream(
               << "*\t"                                       // QUAL
               << numHitFlag << '\t'
               << "HI:i:" << i << '\t'
-              << "AS:i:" << qa.mateScore << '\n';
-
+              << "XT:A:" << alnType << '\t'
+              << "AS:i:" << qa.mateScore;
+      if(!extraBAMtags.empty()) {
+        sstream << extraBAMtags;
+      }
+      sstream << '\n';
     }
     ++alnCtr;
   }
