@@ -1,3 +1,4 @@
+
 #include <set>
 #include <ctime>
 #include <string>
@@ -15,7 +16,8 @@
 
 #include <tclap/CmdLine.h>
 
-#include "tbb/scalable_allocator.h"
+
+#include "oneapi/tbb/scalable_allocator.h"
 #include "test.h"
 #include "assemblyedgeconstructor.h"
 
@@ -52,8 +54,10 @@ public:
 };
 
 
+
 int buildGraphMain(std::vector<std::string>& args)  
 {
+
 	OddConstraint constraint;
 	try
 	{
@@ -97,7 +101,11 @@ int buildGraphMain(std::vector<std::string>& args)
 			"integer",
 			cmd);
 
+
+
+
 		TCLAP::ValueArg<unsigned int> threads("t",
+
 			"threads",
 			"Number of worker threads",
 			false,
@@ -109,6 +117,7 @@ int buildGraphMain(std::vector<std::string>& args)
 			"abundance",
 			"Vertex abundance threshold",
 			false,
+
 			UINT64_MAX,
 			"integer",
 			cmd);
@@ -146,11 +155,13 @@ int buildGraphMain(std::vector<std::string>& args)
 		if (runTests.getValue()) {
 			TwoPaCo::RunTests(10, 20, 9000, 6, Range(3, 11), Range(1, 2), Range(1, 5), Range(4, 5), 0.05, 0.1, tmpDirName.getValue());
 			return 0;
+
 		}
 
 		int64_t filterBits = 1;
 		if (filterSize.isSet()) {
 			filterBits = filterSize.getValue();
+
 		} else {
 			filterBits = log2(filterMemory.getValue() * 8e+9);
 		}
@@ -161,9 +172,11 @@ int buildGraphMain(std::vector<std::string>& args)
 			hashFunctions.getValue(),
 			rounds.getValue(),
 			threads.getValue(),
+
 			abundance.getValue(),
 			tmpDirName.getValue(),
 			outFileName.getValue(),
+
 			std::cout);
 
 		if (vid)
@@ -183,7 +196,32 @@ int buildGraphMain(std::vector<std::string>& args)
 		std::cerr << std::endl << "Error: " << e.what() << std::endl;
 		return 1;
 	}
+  
+  // NOTE: why do this here?  Well, this is to 
+  // fix the OSX build under [bioconda](https://bioconda.github.io).
+  // Specifically, when the `scalable_allocation_command` is called 
+  // it can result in a segmentation fault if no prior allocation had 
+  // been made because of the invalid state of the underlying pointer 
+  // examined by `scalable_allocation_command`.  In reality, this shouldn't
+  // happen because of the static initalization of that pointer, but it 
+  // does (on older OSX platforms).  So, here we will allocate a small 
+  // amount of memory (1k), which will force the scalable allocator 
+  // to initalize itself properly.  Then, we will immediately free 
+  // this memory.  Then we will make the call to `scalable_allocation_command`.
+  // This ensures (for the cost of one extra allocation call) that the 
+  // call to `scalable_allocation_command` works across all platforms on 
+  // which we need to build.
+  void* salloc = scalable_malloc(1024);
+  
+  if (salloc == nullptr) {
+    std::cerr << "TwoPaCo::buildGraphMain:: couldn't allocate using scalable_malloc!" << std::endl; 
+  } else {
+    std::cerr << "TwoPaCo::buildGraphMain:: allocated with scalable_malloc; freeing." << std::endl;
+    scalable_free(salloc);
+
+    std::cerr << "TwoPaCo::buildGraphMain:: Calling scalable_allocation_command(TBBMALLOC_CLEAN_ALL_BUFFERS, 0);" << std::endl;
     scalable_allocation_command(TBBMALLOC_CLEAN_ALL_BUFFERS, 0);
-	scalable_allocation_command(TBBMALLOC_CLEAN_THREAD_BUFFERS, 0);
+  }
+
 	return 0;
 }
