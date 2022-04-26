@@ -5,6 +5,8 @@
 
 #include <chrono>
 #include <stdio.h>
+#include <time.h>
+#include <stdlib.h>
 #include <fstream>
 #include <iostream>
 #include <sstream>
@@ -30,6 +32,7 @@ void run_experiment(int queryLength);
 
 int main(int argc, char **argv)
 {
+    srand(time(NULL));
     if(argc < 2)
     {
         cout << "Usage: " << argv[0] << " <genome file> [saFn=<suffix array file>] [sapFn=<sapling file>] [nb=<log number of buckets>] [maxMem=<max number of buckets will be (genome size)/val>] [k=<k>] [nq=<number of queries>] [errFn=<errors file if outputting them>] [qLen=<query length>] [dBGrepling=<true/false>]" << endl;
@@ -115,14 +118,14 @@ int main(int argc, char **argv)
 void run_experiment(int queryLength)
 {	
     cout << "Running experiment to search for " << queryLength << "-mers" << endl;
-	// Create queries as random kmers from the genome
+	  // Create queries as random kmers from the genome
     vector<string> queries(numQueries, "");
     vector<long long> kmers = vector<long long>(numQueries, 0);
     vector<size_t> idxs = vector<size_t>(numQueries, 0);
     for(int i = 0; i<numQueries; i++)
     {
       idxs[i] = rand() % (sap.n - queryLength);
-    	queries[i] = sap.reference.substr(idxs[i], queryLength);
+      queries[i] = sap.reference.substr(idxs[i], queryLength);
     	kmers[i] = sap.kmerizeAdjusted(queryLength, queries[i]);
     }
 	// Write the queries to a file
@@ -145,10 +148,10 @@ void run_experiment(int queryLength)
     for(int i = 0; i<numQueries; i++)
     {
       if (dBGrepling) {
-        plAnswers[i] = sap.plQuery(queries[i].substr(0, queryLength), kmers[i], queries[i].length(), &(unitigAnswers[i]));
+        plAnswers[i] = sap.dbgPlQuery(queries[i].substr(0, queryLength), kmers[i], queries[i].length(), &(unitigAnswers[i]));
       }
       else {
-        plAnswers[i] = sap.plQuery(queries[i].substr(0, queryLength), kmers[i], queries[i].length());
+        plAnswers[i] = sap.dbgPlQuery(queries[i].substr(0, queryLength), kmers[i], queries[i].length());
       }
     }
     auto end = std::chrono::system_clock::now();

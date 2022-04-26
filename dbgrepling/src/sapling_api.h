@@ -174,6 +174,8 @@ struct Sapling
     size_t mid = (lo + hi) >> 1;
     size_t unitigPos = unitigEnds.at(mid);
 
+    if (idx == unitigPos) return unitigPos;
+
     if (idx > unitigPos) {
       return findUnitig(idx, mid+1, hi);
     }
@@ -182,16 +184,36 @@ struct Sapling
     }
   }
   
+  long long dbgPlQuery(string s, long kmer, size_t length, size_t* dbGreplingUnitig = 0) {
+    long long ans = plQuery(s, kmer, length);
+
+    // Binary search unitigEnds to find associated unitig of query string
+    if (dbGreplingUnitig && ans != -1) {
+      cout << ans << endl;
+
+      size_t idx = findUnitig(ans, 0, unitigEnds.size());
+
+      if (idx != -1)
+      {
+        *dbGreplingUnitig = idx;
+      }
+    }
+
+    return ans;
+  }
+
   /*
    * Queries sapling for a given string s given its kmer value
    * The piecewise linear function is evaluated, and then a binary search is performed around the result
    */
-  long long plQuery(string s, long kmer, size_t length, size_t* dbGreplingUnitig = 0)
+  long long plQuery(string s, long kmer, size_t length)
   {
     size_t predicted = queryPiecewiseLinear(kmer); // Predicted position in suffix array
     size_t idx = rev[predicted]; // Actual s tring position where we predict it to be
     size_t lcp = getLcp(idx, s, 0, length);
-    if(lcp == length) return idx;
+    if(lcp == length) {
+      return idx;
+    }
     size_t lo, hi;
     size_t loLcp = -1, hiLcp = -1;
     if(lcp + idx == n || s[lcp] > reference[idx+lcp])
@@ -201,29 +223,35 @@ struct Sapling
       hi = min(n-1, predicted+mostOver); // Over-prediction which the actual position is highly likely to not exceed
       size_t hiIdx = rev[hi]; // String index corresponding to over-prediction
       size_t oLcp = getLcp(hiIdx, s, 0, length); // LCP between over-prediction suffix and query
-      if(oLcp == length) return hiIdx; // Over-prediction happened to be exactly right
+      if(oLcp == length) {
+        return hiIdx; // Over-prediction happened to be exactly right
+      } 
       if(oLcp + hiIdx == n || s[oLcp] > reference[hiIdx+oLcp])
       {
         // Bad case: over-prediction still not high enough
         lo = hi;
         loLcp = oLcp;
+
         hi = min(n-1, predicted + maxOver + 1);
         hiIdx = rev[hi];
+
         oLcp = getLcp(hiIdx, s, 0, length);
-        if(oLcp == length) return hiIdx;
-		if(s.length() > k)
-		{
-			while(oLcp + hiIdx != n && s[oLcp] > reference[hiIdx+oLcp])
-			{
-				lo = hi;
-				loLcp = oLcp;
-				hi += maxOver;
-				hi = min(n-1, hi);
-				hiIdx = rev[hi];
-        		oLcp = getLcp(hiIdx, s, 0, length);
-        		if(oLcp == s.length()) return hiIdx;
-			}
-		}
+        if(oLcp == length) {
+          return hiIdx;
+        }
+        if(s.length() > k)
+        {
+          while(oLcp + hiIdx != n && s[oLcp] > reference[hiIdx+oLcp])
+          {
+            lo = hi;
+            loLcp = oLcp;
+            hi += maxOver;
+            hi = min(n-1, hi);
+            hiIdx = rev[hi];
+                oLcp = getLcp(hiIdx, s, 0, length);
+                if(oLcp == s.length()) return hiIdx;
+          }
+        }
         hiLcp = oLcp;
       }
       else
@@ -275,16 +303,6 @@ struct Sapling
     long long revPos = binarySearch(s, lo, hi, loLcp, hiLcp, length);
 
     if(revPos == -1) return -1;
-
-    // Binary search unitigEnds to find associated unitig of query string
-    if (dbGreplingUnitig) {
-      size_t idx = findUnitig(rev[revPos], 0, unitigEnds.size());
-
-      if (idx != -1)
-      {
-        *dbGreplingUnitig = idx;
-      }
-    }
 
     return rev[revPos];
   }
