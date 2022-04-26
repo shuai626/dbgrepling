@@ -189,8 +189,6 @@ struct Sapling
 
     // Binary search unitigEnds to find associated unitig of query string
     if (dbGreplingUnitig && ans != -1) {
-      cout << ans << endl;
-
       size_t idx = findUnitig(ans, 0, unitigEnds.size());
 
       if (idx != -1)
