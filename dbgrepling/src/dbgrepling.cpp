@@ -20,11 +20,12 @@ using namespace std::chrono;
 int numBuckets = -1;
 int maxMem = -1;
 int k = -1;
-int numQueries = 5000000;
+int numQueries = 100;
 string errorFnString = "";
 string saFnString = "", saplingFnString = "";
 int queryLength = -1;
 bool dBGrepling = false;
+int mode = 0;
 
 Sapling sap;
 
@@ -35,7 +36,7 @@ int main(int argc, char **argv)
     srand(time(NULL));
     if(argc < 2)
     {
-        cout << "Usage: " << argv[0] << " <genome file> [saFn=<suffix array file>] [sapFn=<sapling file>] [nb=<log number of buckets>] [maxMem=<max number of buckets will be (genome size)/val>] [k=<k>] [nq=<number of queries>] [errFn=<errors file if outputting them>] [qLen=<query length>] [dBGrepling=<true/false>]" << endl;
+        cout << "Usage: " << argv[0] << " <genome file> [saFn=<suffix array file>] [sapFn=<sapling file>] [nb=<log number of buckets>] [maxMem=<max number of buckets will be (genome size)/val>] [k=<k>] [nq=<number of queries>] [errFn=<errors file if outputting them>] [qLen=<query length>] [dBGrepling=<true/false>] [mode=naive/learned]" << endl;
         return 0;
     }
 
@@ -91,6 +92,14 @@ int main(int argc, char **argv)
             saFnString += ".dbg.sa";
             saplingFnString += ".dbg.sap";
           } 
+        }
+        if(arg.compare("mode") == 0) {
+          if (val == "naive") {
+            mode = 0;
+          }
+          else if (val == "learned") {
+            mode = 1;
+          }
         }
       }
     }
@@ -148,10 +157,10 @@ void run_experiment(int queryLength)
     for(int i = 0; i<numQueries; i++)
     {
       if (dBGrepling) {
-        plAnswers[i] = sap.dbgPlQuery(queries[i].substr(0, queryLength), kmers[i], queries[i].length(), &(unitigAnswers[i]));
+        plAnswers[i] = sap.dbgPlQuery(queries[i].substr(0, queryLength), kmers[i], queries[i].length(), &(unitigAnswers[i]), mode);
       }
       else {
-        plAnswers[i] = sap.dbgPlQuery(queries[i].substr(0, queryLength), kmers[i], queries[i].length());
+        plAnswers[i] = sap.dbgPlQuery(queries[i].substr(0, queryLength), kmers[i], queries[i].length(), NULL, mode);
       }
     }
     auto end = std::chrono::system_clock::now();
