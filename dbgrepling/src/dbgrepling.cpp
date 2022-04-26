@@ -22,6 +22,7 @@ int numQueries = 5000000;
 string errorFnString = "";
 string saFnString = "", saplingFnString = "";
 int queryLength = -1;
+bool dBGrepling = false;
 
 Sapling sap;
 
@@ -31,11 +32,12 @@ int main(int argc, char **argv)
 {
     if(argc < 2)
     {
-        cout << "Usage: " << argv[0] << " <genome file> [saFn=<suffix array file>] [sapFn=<sapling file>] [nb=<log number of buckets>] [maxMem=<max number of buckets will be (genome size)/val>] [k=<k>] [nq=<number of queries>] [errFn=<errors file if outputting them>] [qLen=<query length>]" << endl;
+        cout << "Usage: " << argv[0] << " <genome file> [saFn=<suffix array file>] [sapFn=<sapling file>] [nb=<log number of buckets>] [maxMem=<max number of buckets will be (genome size)/val>] [k=<k>] [nq=<number of queries>] [errFn=<errors file if outputting them>] [qLen=<query length>] [dBGrepling=<true/false>]" << endl;
         return 0;
     }
 
     string refFnString = argv[1];
+
     saFnString = refFnString + ".sa";
     saplingFnString = refFnString + ".sap";
 
@@ -76,26 +78,33 @@ int main(int argc, char **argv)
         {
           maxMem = stoi(val);
         }
-		if(arg.compare("qLen") == 0)
+		    if(arg.compare("qLen") == 0)
         {
           queryLength = stoi(val);
+        }
+        if(arg.compare("dBGrepling") == 0) {
+          if (val == "true") {
+            dBGrepling = true;
+            saFnString += ".dbg.sa";
+            saplingFnString += ".dbg.sap";
+          } 
         }
       }
     }
 
     // Build the Sapling data structure
-    sap = Sapling(refFnString, saFnString, saplingFnString, numBuckets, maxMem, k, errorFnString);
+    sap = Sapling(refFnString, saFnString, saplingFnString, numBuckets, maxMem, k, errorFnString, dBGrepling);
     
-    // cout << "Testing Sapling" << endl;
+    cout << "Testing Sapling" << endl;
 
 	if(queryLength == -1)
 	{
-		// run_experiment(sap.k-10);
+		run_experiment(sap.k-10);
 		run_experiment(sap.k);
-		// run_experiment(sap.k + 10);
-		// run_experiment(sap.k + 20);
-		// run_experiment(sap.k + 30);
-		// run_experiment(sap.k + 80);
+		run_experiment(sap.k + 10);
+		run_experiment(sap.k + 20);
+		run_experiment(sap.k + 30);
+		run_experiment(sap.k + 80);
 	}
     else
 	{
@@ -105,7 +114,7 @@ int main(int argc, char **argv)
 
 void run_experiment(int queryLength)
 {	
-    // cout << "Running experiment to search for " << queryLength << "-mers" << endl;
+    cout << "Running experiment to search for " << queryLength << "-mers" << endl;
 	// Create queries as random kmers from the genome
     vector<string> queries(numQueries, "");
     vector<long long> kmers = vector<long long>(numQueries, 0);
@@ -127,14 +136,20 @@ void run_experiment(int queryLength)
         for(int j = 0; j<queryLength; j++) fprintf(outfile, "9");
         fprintf(outfile, "\n");
     }
-    // cout << "Constructed queries" << endl;
+    cout << "Constructed queries" << endl;
     
     // Run piece-wise linear test
     vector<long long> plAnswers(numQueries, 0);
+    vector<size_t> unitigAnswers(numQueries, 0);
     auto start = std::chrono::system_clock::now();
     for(int i = 0; i<numQueries; i++)
     {
+      if (dBGrepling) {
+        plAnswers[i] = sap.plQuery(queries[i].substr(0, queryLength), kmers[i], queries[i].length(), &(unitigAnswers[i]));
+      }
+      else {
         plAnswers[i] = sap.plQuery(queries[i].substr(0, queryLength), kmers[i], queries[i].length());
+      }
     }
     auto end = std::chrono::system_clock::now();
     std::chrono::duration<double> elapsed_seconds = end-start;
@@ -149,7 +164,7 @@ void run_experiment(int queryLength)
         {
             countCorrect++;
         }
-//else cout << idxs[i] << " " << plAnswers[i] << " " << queries[i] << " " << sap.reference.substr(plAnswers[i], queryLength) << endl;
+        else cout << idxs[i] << " " << plAnswers[i] << " " << queries[i] << " " << sap.reference.substr(plAnswers[i], queryLength) << " " << unitigAnswers[i] << endl;
     }
-	// cout << "Piecewise linear correctness: " << countCorrect << " out of " << numQueries << endl;
+	cout << "Piecewise linear correctness: " << countCorrect << " out of " << numQueries << endl;
 }

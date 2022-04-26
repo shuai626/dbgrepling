@@ -235,7 +235,7 @@ struct SuffixArray {
 
 SuffixArray sa_init2(string str, size_t letters)
 {
-    return SuffixArray(toIntVector(str), str.length(), letters + 1);
+    return SuffixArray(toIntVector(str), str.length(), letters + 2);
 }
 
 SuffixArray sa_init3(string dna, int alpha)
@@ -245,6 +245,7 @@ SuffixArray sa_init3(string dna, int alpha)
     std::replace(rep.begin(), rep.end(), 'G', 'C');
     std::replace(rep.begin(), rep.end(), 'T', 'D');
     std::replace(rep.begin(), rep.end(), 'N', 'E');
+    std::replace(rep.begin(), rep.end(), '$', 'F');
     return sa_init2(rep, 1<<alpha);
 }
 

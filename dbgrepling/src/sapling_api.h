@@ -66,6 +66,9 @@ struct Sapling
 
   // The sufix array of the genome
   SuffixArray lsa;
+
+  // DBGrepling: List of ending positions for unitigs
+  vector<size_t> unitigEnds;
   
   /*
    * Hashes the first k characters of a string into a 2k-bit integer
@@ -89,8 +92,6 @@ struct Sapling
     return kmer << (2 * (k - length - 1));
   }
 
-  
-  
   /*
    * Queries the piecewise linear index for a given kmer value.
    * Returns the predicted suffix array position
@@ -151,12 +152,41 @@ struct Sapling
       return binarySearch(s, lo, mid, loLcp, nLcp, length);
     }
   }
+
+  /*
+   * Performs binary search on unitigEnds with given index in reference text.
+   * 
+   * idx is the index of query string in reference text (must be in range)
+   * 
+   * Returns a unitigEnds index i such that the query string can be found in unitig i
+   */
+  size_t findUnitig(size_t idx, size_t lo, size_t hi) {
+    // Base Case
+    if (hi <= lo) {
+      if (idx > unitigEnds.at(lo)) {
+        return lo + 1;
+      }
+      else {
+        return lo;
+      }
+    }
+
+    size_t mid = (lo + hi) >> 1;
+    size_t unitigPos = unitigEnds.at(mid);
+
+    if (idx > unitigPos) {
+      return findUnitig(idx, mid+1, hi);
+    }
+    else {
+      return findUnitig(idx, lo, mid-1);
+    }
+  }
   
   /*
    * Queries sapling for a given string s given its kmer value
    * The piecewise linear function is evaluated, and then a binary search is performed around the result
    */
-  long long plQuery(string s, long kmer, size_t length)
+  long long plQuery(string s, long kmer, size_t length, size_t* dbGreplingUnitig = 0)
   {
     size_t predicted = queryPiecewiseLinear(kmer); // Predicted position in suffix array
     size_t idx = rev[predicted]; // Actual s tring position where we predict it to be
@@ -243,7 +273,19 @@ struct Sapling
       }
     }
     long long revPos = binarySearch(s, lo, hi, loLcp, hiLcp, length);
+
     if(revPos == -1) return -1;
+
+    // Binary search unitigEnds to find associated unitig of query string
+    if (dbGreplingUnitig) {
+      size_t idx = findUnitig(rev[revPos], 0, unitigEnds.size());
+
+      if (idx != -1)
+      {
+        *dbGreplingUnitig = idx;
+      }
+    }
+
     return rev[revPos];
   }
 
@@ -489,7 +531,7 @@ struct Sapling
   /*
    * Takes a FASTA filepath along with other parameters and builds Sapling from the contained genome
    */
-  Sapling(string refFnString, string saFnString, string saplingFnString, int numBuckets, int myMaxMem, int myK, string errorFn)
+  Sapling(string refFnString, string saFnString, string saplingFnString, int numBuckets, int myMaxMem, int myK, string errorFn, bool dBGrepling = false)
   {
     for(int i = 0; i<256; i++) vals[i] = 0;
     vals['A'] = 0;
@@ -530,6 +572,13 @@ struct Sapling
             out << cur[i];
           }
         }
+        // Add separator characters between each unitig
+        // Store ending position of each unitig in unitigEnds
+        if (dBGrepling) {
+          charCount++;
+          out << '$';
+          unitigEnds.push_back(charCount);
+        }
       }
       else
       {
@@ -546,8 +595,6 @@ struct Sapling
       chrEnds[charCount] = curName;
     }
     reference = out.str();
-
-    cout << reference << endl;
       
     n = reference.length();
 
@@ -560,7 +607,7 @@ struct Sapling
     
     if(f.good())
     {
-      // cout << "Reading suffix array from file" << endl;
+      cout << "Reading suffix array from file" << endl;
       
       lsa = SuffixArray();
       
@@ -612,9 +659,10 @@ struct Sapling
     // cout << "Filling rev and sa" << endl;
     for(size_t i = 0; i<n; i++) rev[lsa.inv[i]] = i;
     
-    if(saplingf.good())
+    // TODO: Fix issue where enabling dBGrepling destroys ability to load .sap file
+    if(saplingf.good() && !dBGrepling)
     {
-      // cout << "Reading Sapling from file" << endl;
+      cout << "Reading Sapling from file" << endl;
       FILE *infile = fopen (saplingfn, "rb");
       size_t xlistsize;
       int err = fread(&buckets, sizeof(int), 1, infile);
