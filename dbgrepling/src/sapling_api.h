@@ -180,6 +180,15 @@ struct Sapling
       return findUnitig(idx, mid+1, hi);
     }
     else {
+      // Special case when lo = 0 and mid = 0. mid-1 becomes overflow for size_t
+      if (mid == 0) {
+        if (idx > unitigEnds.at(lo)) {
+          return lo + 1;
+        }
+        else {
+          return lo;
+        }
+      }
       return findUnitig(idx, lo, mid-1);
     }
   }
@@ -682,6 +691,12 @@ struct Sapling
     rev = vector<size_t>(n, 0);
     // cout << "Filling rev and sa" << endl;
     for(size_t i = 0; i<n; i++) rev[lsa.inv[i]] = i;
+
+    // [DEBUG] Print out the suffix array
+    // for (auto i: rev) {
+    //   cout << rev[i] << " "<< reference.substr(i, k) << endl;
+    // }
+
     if(saplingf.good())
     {
       cout << "Reading Sapling from file" << endl;
