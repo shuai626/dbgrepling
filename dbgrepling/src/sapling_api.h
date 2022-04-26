@@ -306,7 +306,7 @@ struct Sapling
       return rev[revPos];
     }
     else if (mode == 0) {
-      long long revPos = binarySearch(s, 0, n-1, 0, 0, length);
+      long long revPos = binarySearch(s, 0, n, 0, 0, length);
 
       if(revPos == -1) return -1;
       return rev[revPos];
