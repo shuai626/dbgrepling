@@ -659,8 +659,7 @@ struct Sapling
     // cout << "Filling rev and sa" << endl;
     for(size_t i = 0; i<n; i++) rev[lsa.inv[i]] = i;
     
-    // TODO: Fix issue where enabling dBGrepling destroys ability to load .sap file
-    if(saplingf.good() && !dBGrepling)
+    if(saplingf.good())
     {
       cout << "Reading Sapling from file" << endl;
       FILE *infile = fopen (saplingfn, "rb");
