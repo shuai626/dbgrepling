@@ -309,7 +309,6 @@ struct Sapling
       long long revPos = binarySearch(s, 0, n-1, 0, 0, length);
 
       if(revPos == -1) return -1;
-
       return rev[revPos];
     }
   }
@@ -601,7 +600,7 @@ struct Sapling
         // Store ending position of each unitig in unitigEnds
         if (dBGrepling) {
           charCount++;
-          out << '$';
+          out << '^';
           unitigEnds.push_back(charCount);
         }
       }
@@ -683,7 +682,6 @@ struct Sapling
     rev = vector<size_t>(n, 0);
     // cout << "Filling rev and sa" << endl;
     for(size_t i = 0; i<n; i++) rev[lsa.inv[i]] = i;
-    
     if(saplingf.good())
     {
       cout << "Reading Sapling from file" << endl;

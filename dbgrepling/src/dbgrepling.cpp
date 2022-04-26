@@ -20,7 +20,7 @@ using namespace std::chrono;
 int numBuckets = -1;
 int maxMem = -1;
 int k = -1;
-int numQueries = 100;
+int numQueries = 1000;
 string errorFnString = "";
 string saFnString = "", saplingFnString = "";
 int queryLength = -1;
@@ -111,7 +111,7 @@ int main(int argc, char **argv)
 
 	if(queryLength == -1)
 	{
-		run_experiment(sap.k-10);
+		run_experiment(sap.k - 10);
 		run_experiment(sap.k);
 		run_experiment(sap.k + 10);
 		run_experiment(sap.k + 20);

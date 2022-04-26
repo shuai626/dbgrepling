@@ -245,7 +245,7 @@ SuffixArray sa_init3(string dna, int alpha)
     std::replace(rep.begin(), rep.end(), 'G', 'C');
     std::replace(rep.begin(), rep.end(), 'T', 'D');
     std::replace(rep.begin(), rep.end(), 'N', 'E');
-    std::replace(rep.begin(), rep.end(), '$', 'F');
+    std::replace(rep.begin(), rep.end(), '^', 'F');
     return sa_init2(rep, 1<<alpha);
 }
 
