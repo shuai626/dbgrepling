@@ -11,4 +11,6 @@ To run:
   [k=<k, default 21>] 
   [nq=<number of queries, default 5000000>] 
   [errFn=<errors file if outputting them, default None>]
+  [dBGrepling=<true/false>]
+  [mode=naive/learned]
 ```
