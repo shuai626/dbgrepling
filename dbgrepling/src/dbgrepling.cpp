@@ -37,6 +37,12 @@ int main(int argc, char **argv)
     if(argc < 2)
     {
         cout << "Usage: " << argv[0] << " <genome file> [saFn=<suffix array file>] [sapFn=<sapling file>] [nb=<log number of buckets>] [maxMem=<max number of buckets will be (genome size)/val>] [k=<k>] [nq=<number of queries>] [errFn=<errors file if outputting them>] [qLen=<query length>] [dBGrepling=<true/false>] [mode=naive/learned]" << endl;
+        // " <genome file> [saFn=<suffix array file>] 
+        // [sapFn=<sapling file>] [nb=<log number of buckets>] 
+        // [maxMem=<max number of buckets will be (genome size)/val>] [k=<k>] [nq=<number of queries>] 
+        // [errFn=<errors file if outputting them>] [qLen=<query length>] [dBGrepling=<true/false>] 
+        // [mode=naive/learned]" << endl;
+
         return 0;
     }
 
@@ -176,7 +182,7 @@ void run_experiment(int queryLength)
         {
             countCorrect++;
         }
-        else cout << idxs[i] << " " << plAnswers[i] << " " << queries[i] << " " << sap.reference.substr(plAnswers[i], queryLength) << " " << unitigAnswers[i] << endl;
+        // else cout << idxs[i] << " " << plAnswers[i] << " " << queries[i] << " " << sap.reference.substr(plAnswers[i], queryLength) << " " << unitigAnswers[i] << endl;
     }
 	cout << "Piecewise linear correctness: " << countCorrect << " out of " << numQueries << endl;
 }

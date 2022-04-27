@@ -653,12 +653,7 @@ struct Sapling
     const char *saplingfn = saplingFnString.c_str();
     ifstream saplingf(saplingfn);
 
-    // get memory
-    long saSize = GetFileSize(fn);
-    long saplingSize = GetFileSize(saplingfn);
-    cout << "sa size: " << saSize << " sapling size: " << saplingSize << " total size: " << saSize+saplingSize << endl;
-    // printf("sa size: %lu, sapling size: %lu")
-    
+
     if(f.good())
     {
       cout << "Reading suffix array from file" << endl;
@@ -704,6 +699,8 @@ struct Sapling
       lsa.krmq_init(k);
       cout << "Built suffix array of size " << lsa.inv.size() << endl;
     }
+
+
 
     //vector<size_t>().swap(lsa.lcp);
     
@@ -787,8 +784,16 @@ struct Sapling
       fwrite(&mostUnder, sizeof(int), 1, outfile);
 
       // get memory
-      cout << "xlist size: " << xlistsize << " total memory: " << 2*xlistsize*sizeof(long long) << endl << endl;
+      // cout << "xlist size: " << xlistsize << " total memory: " << 2*xlistsize*sizeof(long long) << endl << endl;
     }
+
+        // get memory
+    long saSize = GetFileSize(fn);
+    long saplingSize = GetFileSize(saplingfn);
+    // cout << fn << " sapling file: " << saplingfn << endl;
+    cout << "sa size: " << saSize << " sapling size: " << saplingSize << " total size: " << saSize+saplingSize << endl;
+    // printf("sa size: %lu, sapling size: %lu")
+    
   }
 
   Sapling() {}
