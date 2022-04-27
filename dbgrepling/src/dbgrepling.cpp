@@ -26,6 +26,7 @@ string saFnString = "", saplingFnString = "";
 int queryLength = -1;
 bool dBGrepling = false;
 int mode = 0;
+int unitigSearchMethod = 0;
 
 Sapling sap;
 
@@ -36,13 +37,7 @@ int main(int argc, char **argv)
     srand(time(NULL));
     if(argc < 2)
     {
-        cout << "Usage: " << argv[0] << " <genome file> [saFn=<suffix array file>] [sapFn=<sapling file>] [nb=<log number of buckets>] [maxMem=<max number of buckets will be (genome size)/val>] [k=<k>] [nq=<number of queries>] [errFn=<errors file if outputting them>] [qLen=<query length>] [dBGrepling=<true/false>] [mode=naive/learned]" << endl;
-        // " <genome file> [saFn=<suffix array file>] 
-        // [sapFn=<sapling file>] [nb=<log number of buckets>] 
-        // [maxMem=<max number of buckets will be (genome size)/val>] [k=<k>] [nq=<number of queries>] 
-        // [errFn=<errors file if outputting them>] [qLen=<query length>] [dBGrepling=<true/false>] 
-        // [mode=naive/learned]" << endl;
-
+        cout << "Usage: " << argv[0] << " <genome file> [saFn=<suffix array file>] [sapFn=<sapling file>] [nb=<log number of buckets>] [maxMem=<max number of buckets will be (genome size)/val>] [k=<k>] [nq=<number of queries>] [errFn=<errors file if outputting them>] [qLen=<query length>] [dBGrepling=<true/false>] [mode=naive/learned] [unitigSearchMethod=<rank/binary_search>]" << endl;
         return 0;
     }
 
@@ -107,6 +102,14 @@ int main(int argc, char **argv)
             mode = 1;
           }
         }
+        if(arg.compare("unitigSearchMethod") == 0) {
+          if (val == "rank") {
+            unitigSearchMethod = 0;
+          }
+          else if (val == "binary_search") {
+            unitigSearchMethod = 1;
+          }
+        }
       }
     }
 
@@ -159,11 +162,13 @@ void run_experiment(int queryLength)
     // Run piece-wise linear test
     vector<long long> plAnswers(numQueries, 0);
     vector<size_t> unitigAnswers(numQueries, 0);
+    sdsl::rank_support_v5<1> r(sap.getUnitigBitVec());
+
     auto start = std::chrono::system_clock::now();
     for(int i = 0; i<numQueries; i++)
     {
       if (dBGrepling) {
-        plAnswers[i] = sap.dbgPlQuery(queries[i].substr(0, queryLength), kmers[i], queries[i].length(), &(unitigAnswers[i]), mode);
+        plAnswers[i] = sap.dbgPlQuery(queries[i].substr(0, queryLength), kmers[i], queries[i].length(), &(unitigAnswers[i]), mode, &r);
       }
       else {
         plAnswers[i] = sap.dbgPlQuery(queries[i].substr(0, queryLength), kmers[i], queries[i].length(), NULL, mode);

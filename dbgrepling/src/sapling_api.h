@@ -13,6 +13,8 @@
 
 #include "sa.h"
 #include "util.h"
+#include <sdsl/bit_vectors.hpp>
+#include <sdsl/rank_support.hpp>
 
 
 #include <sys/stat.h>
@@ -78,8 +80,15 @@ struct Sapling
   // The sufix array of the genome
   SuffixArray lsa;
 
-  // DBGrepling: List of ending positions for unitigs
+  // DBGrepling: List of ending positions for unitigs for binary_search method
   vector<size_t> unitigEnds;
+
+  // DBGrepling: List of ending positions for unitigs for rank method
+  sdsl::bit_vector unitigEndsBitVec;
+
+  sdsl::bit_vector* getUnitigBitVec() {
+    return &unitigEndsBitVec;
+  }
   
   /*
    * Hashes the first k characters of a string into a 2k-bit integer
@@ -204,11 +213,16 @@ struct Sapling
     }
   }
   
-  long long dbgPlQuery(string s, long kmer, size_t length, size_t* dbGreplingUnitig = 0, int mode = 1) {
+  long long dbgPlQuery(string s, long kmer, size_t length, size_t* dbGreplingUnitig = 0, int mode = 1, sdsl::rank_support_v5<1> * r_ = NULL) {
     long long ans = plQuery(s, kmer, length, mode);
 
     // Binary search unitigEnds to find associated unitig of query string
     if (dbGreplingUnitig && ans != -1) {
+      if (r_) {
+        *dbGreplingUnitig = r_->rank(ans);
+        return ans;
+      }
+
       size_t idx = findUnitig(ans, 0, unitigEnds.size());
 
       if (idx != -1)
@@ -645,6 +659,11 @@ struct Sapling
     reference = out.str();
       
     n = reference.length();
+
+    unitigEndsBitVec = sdsl::bit_vector(n);
+    for (auto idx : unitigEnds) {
+      unitigEndsBitVec[idx - 1] = 1;
+    }
 
     // Get the suffix array - either read from a file or generate it
     const char *fn = saFnString.c_str();
