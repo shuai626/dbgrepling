@@ -1,10 +1,11 @@
 CXX = g++
-CXXFLAGS = -O2 -std=c++11 -g -Wall -I ../include -L ~/lib -lsdsl -ldivsufsort -ldivsufsort64
+CXXFLAGS = -O3 -DEBUG -std=c++11 -g -Wall -I ~/include
+LIBS= -L ~/lib -lsdsl -ldivsufsort -ldivsufsort64
 
 all: dbgrepling 
 
-align: align.o sapling_api.h ssw_cpp.o ssw.o
-	$(CXX) $(CXXFLAGS) -o align align.o ssw_cpp.o ssw.o
+dbgrepling: dbgrepling.cpp sapling_api.h
+	$(CXX) $(CXXFLAGS) -o dbgrepling dbgrepling.cpp $(LIBS)
 
 clean:
-	rm -f dbgrepling *.o *.dbg.*
+	rm -f dbgrepling .o.dbg.*
