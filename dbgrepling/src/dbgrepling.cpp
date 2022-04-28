@@ -168,7 +168,12 @@ void run_experiment(int queryLength)
     for(int i = 0; i<numQueries; i++)
     {
       if (dBGrepling) {
-        plAnswers[i] = sap.dbgPlQuery(queries[i].substr(0, queryLength), kmers[i], queries[i].length(), &(unitigAnswers[i]), mode, &r);
+        if (unitigSearchMethod == 0) {
+          plAnswers[i] = sap.dbgPlQuery(queries[i].substr(0, queryLength), kmers[i], queries[i].length(), &(unitigAnswers[i]), mode, &r);
+        }
+        else if (unitigSearchMethod == 1) {
+          plAnswers[i] = sap.dbgPlQuery(queries[i].substr(0, queryLength), kmers[i], queries[i].length(), &(unitigAnswers[i]), mode, NULL);
+        }
       }
       else {
         plAnswers[i] = sap.dbgPlQuery(queries[i].substr(0, queryLength), kmers[i], queries[i].length(), NULL, mode);
@@ -187,7 +192,7 @@ void run_experiment(int queryLength)
         {
             countCorrect++;
         }
-        else cout << idxs[i] << " " << plAnswers[i] << " " << queries[i] << " " << sap.reference.substr(plAnswers[i], queryLength) << " " << unitigAnswers[i] << endl;
+        // else cout << idxs[i] << " " << plAnswers[i] << " " << queries[i] << " " << sap.reference.substr(plAnswers[i], queryLength) << " " << unitigAnswers[i] << endl;
     }
 	cout << "Piecewise linear correctness: " << countCorrect << " out of " << numQueries << endl;
 }
