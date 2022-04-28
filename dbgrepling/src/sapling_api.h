@@ -69,14 +69,15 @@ struct Sapling
   // The sufix array of the genome
   SuffixArray lsa;
 
-  // DBGrepling: Stores the method for unitig search
-  int unitigSearchMethod;
-
   // DBGrepling: List of ending positions for unitigs for binary_search method
   vector<size_t> unitigEnds;
 
   // DBGrepling: List of ending positions for unitigs for rank method
   sdsl::bit_vector unitigEndsBitVec;
+
+  sdsl::bit_vector* getUnitigBitVec() {
+    return &unitigEndsBitVec;
+  }
   
   /*
    * Hashes the first k characters of a string into a 2k-bit integer
@@ -201,14 +202,13 @@ struct Sapling
     }
   }
   
-  long long dbgPlQuery(string s, long kmer, size_t length, size_t* dbGreplingUnitig = 0, int mode = 1) {
+  long long dbgPlQuery(string s, long kmer, size_t length, size_t* dbGreplingUnitig = 0, int mode = 1, sdsl::rank_support_v5<1> * r_ = NULL) {
     long long ans = plQuery(s, kmer, length, mode);
 
     // Binary search unitigEnds to find associated unitig of query string
     if (dbGreplingUnitig && ans != -1) {
-      if (unitigSearchMethod == 0) {
-        sdsl::rank_support_v<1> r(&unitigEndsBitVec);
-        *dbGreplingUnitig = r(ans);
+      if (r_) {
+        *dbGreplingUnitig = r_->rank(ans);
         return ans;
       }
 
@@ -578,7 +578,7 @@ struct Sapling
   /*
    * Takes a FASTA filepath along with other parameters and builds Sapling from the contained genome
    */
-  Sapling(string refFnString, string saFnString, string saplingFnString, int numBuckets, int myMaxMem, int myK, string errorFn, bool dBGrepling = false, int searchMethod = 0)
+  Sapling(string refFnString, string saFnString, string saplingFnString, int numBuckets, int myMaxMem, int myK, string errorFn, bool dBGrepling = false)
   {
     for(int i = 0; i<256; i++) vals[i] = 0;
     vals['A'] = 0;
@@ -587,7 +587,6 @@ struct Sapling
     vals['T'] = 3;
 
     buckets = numBuckets;
-    unitigSearchMethod = searchMethod;
     errorsFn = errorFn;
 
     if(myK != -1)
@@ -646,11 +645,9 @@ struct Sapling
       
     n = reference.length();
 
-    if (unitigSearchMethod == 0) {
-      unitigEndsBitVec = sdsl::bit_vector(n);
-      for (auto idx : unitigEnds) {
-        unitigEndsBitVec[idx - 1] = 1;
-      }
+    unitigEndsBitVec = sdsl::bit_vector(n);
+    for (auto idx : unitigEnds) {
+      unitigEndsBitVec[idx - 1] = 1;
     }
 
     // Get the suffix array - either read from a file or generate it

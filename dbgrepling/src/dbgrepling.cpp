@@ -114,7 +114,7 @@ int main(int argc, char **argv)
     }
 
     // Build the Sapling data structure
-    sap = Sapling(refFnString, saFnString, saplingFnString, numBuckets, maxMem, k, errorFnString, dBGrepling, unitigSearchMethod);
+    sap = Sapling(refFnString, saFnString, saplingFnString, numBuckets, maxMem, k, errorFnString, dBGrepling);
     
     cout << "Testing Sapling" << endl;
 
@@ -162,11 +162,13 @@ void run_experiment(int queryLength)
     // Run piece-wise linear test
     vector<long long> plAnswers(numQueries, 0);
     vector<size_t> unitigAnswers(numQueries, 0);
+    sdsl::rank_support_v5<1> r(sap.getUnitigBitVec());
+
     auto start = std::chrono::system_clock::now();
     for(int i = 0; i<numQueries; i++)
     {
       if (dBGrepling) {
-        plAnswers[i] = sap.dbgPlQuery(queries[i].substr(0, queryLength), kmers[i], queries[i].length(), &(unitigAnswers[i]), mode);
+        plAnswers[i] = sap.dbgPlQuery(queries[i].substr(0, queryLength), kmers[i], queries[i].length(), &(unitigAnswers[i]), mode, &r);
       }
       else {
         plAnswers[i] = sap.dbgPlQuery(queries[i].substr(0, queryLength), kmers[i], queries[i].length(), NULL, mode);
