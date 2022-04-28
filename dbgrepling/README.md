@@ -1,13 +1,16 @@
 # DBGrepling: Sapling-Inspired De Bruijn Graph Suffix Array Indexing
   
 A method for achieving suffix array queries on a set of unitigs.
-  
+
 ### Building:
+1. Install (`sdsl-lite`)[https://github.com/simongog/sdsl-lite]. The `src/` Makefile assumes
+the `sdsl-lite` library dependencies are installed in `~/lib`.
+
+2. Run the following code:
 ```
 cd src
 make
 ```
-
   
 ### Running DBGrepling test:  
 ```

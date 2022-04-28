@@ -1,5 +1,5 @@
 CXX = g++
-CXXFLAGS = -O2 -std=c++11 -g -Wall
+CXXFLAGS = -O2 -std=c++11 -g -Wall -I ../include -L ~/lib -lsdsl -ldivsufsort -ldivsufsort64
 
 all: dbgrepling 
 

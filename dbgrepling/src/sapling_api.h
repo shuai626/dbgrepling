@@ -13,6 +13,8 @@
 
 #include "sa.h"
 #include "util.h"
+#include <sdsl/bit_vectors.hpp>
+#include <sdsl/rank_support.hpp>
 
 struct Sapling
 {
@@ -67,8 +69,14 @@ struct Sapling
   // The sufix array of the genome
   SuffixArray lsa;
 
-  // DBGrepling: List of ending positions for unitigs
+  // DBGrepling: Stores the method for unitig search
+  int unitigSearchMethod;
+
+  // DBGrepling: List of ending positions for unitigs for binary_search method
   vector<size_t> unitigEnds;
+
+  // DBGrepling: List of ending positions for unitigs for rank method
+  sdsl::bit_vector unitigEndsBitVec;
   
   /*
    * Hashes the first k characters of a string into a 2k-bit integer
@@ -198,6 +206,12 @@ struct Sapling
 
     // Binary search unitigEnds to find associated unitig of query string
     if (dbGreplingUnitig && ans != -1) {
+      if (unitigSearchMethod == 0) {
+        sdsl::rank_support_v<1> r(&unitigEndsBitVec);
+        *dbGreplingUnitig = r(ans);
+        return ans;
+      }
+
       size_t idx = findUnitig(ans, 0, unitigEnds.size());
 
       if (idx != -1)
@@ -564,7 +578,7 @@ struct Sapling
   /*
    * Takes a FASTA filepath along with other parameters and builds Sapling from the contained genome
    */
-  Sapling(string refFnString, string saFnString, string saplingFnString, int numBuckets, int myMaxMem, int myK, string errorFn, bool dBGrepling = false)
+  Sapling(string refFnString, string saFnString, string saplingFnString, int numBuckets, int myMaxMem, int myK, string errorFn, bool dBGrepling = false, int searchMethod = 0)
   {
     for(int i = 0; i<256; i++) vals[i] = 0;
     vals['A'] = 0;
@@ -573,6 +587,7 @@ struct Sapling
     vals['T'] = 3;
 
     buckets = numBuckets;
+    unitigSearchMethod = searchMethod;
     errorsFn = errorFn;
 
     if(myK != -1)
@@ -630,6 +645,13 @@ struct Sapling
     reference = out.str();
       
     n = reference.length();
+
+    if (unitigSearchMethod == 0) {
+      unitigEndsBitVec = sdsl::bit_vector(n);
+      for (auto idx : unitigEnds) {
+        unitigEndsBitVec[idx - 1] = 1;
+      }
+    }
 
     // Get the suffix array - either read from a file or generate it
     const char *fn = saFnString.c_str();
