@@ -213,23 +213,89 @@ struct Sapling
     }
   }
   
-  long long dbgPlQuery(string s, long kmer, size_t length, size_t* dbGreplingUnitig = 0, int mode = 1, sdsl::rank_support_v5<1> * r_ = NULL) {
+  long long dbgPlQuery(
+    string s, long kmer, 
+    size_t length, size_t* dbGreplingUnitig = 0, int mode = 1, 
+    sdsl::rank_support_v5<1> * r_ = NULL,
+    std::chrono::duration<double>* sa_search_time = NULL, 
+    std::chrono::duration<double>* unitig_search_time = NULL) {
+
+    auto start = std::chrono::system_clock::now();
     long long ans = plQuery(s, kmer, length, mode);
+    auto end = std::chrono::system_clock::now();
+    *sa_search_time += (end-start);
 
     // Binary search unitigEnds to find associated unitig of query string
+    start = std::chrono::system_clock::now();
     if (dbGreplingUnitig && ans != -1) {
       if (r_) {
         *dbGreplingUnitig = r_->rank(ans);
-        return ans;
-      }
+      } else {
+        
+        size_t idx = findUnitig(ans, 0, unitigEnds.size());
 
-      size_t idx = findUnitig(ans, 0, unitigEnds.size());
+        // for (int i=0; i<100; i++) {
+        //   // cout << idx << endl;
 
-      if (idx != -1)
-      {
-        *dbGreplingUnitig = idx;
+        // }
+        if (idx != -1)
+        {
+          *dbGreplingUnitig = idx;
+        }
       }
     }
+    end = std::chrono::system_clock::now();
+    *unitig_search_time += (end-start);
+    // (*unitig_search_time) += 1;
+    // *unitig_search_time += (end-start).size();
+
+    // cout << "sa search: " << elapsed_seconds_sa_search.count() << " unitig search: " << 
+    //   elapsed_seconds_unitig_search.count() << " total: " << elapsed_seconds_sa_search.count()+elapsed_seconds_unitig_search.count() 
+    //   << endl;
+
+    return ans;
+  }
+
+
+  long long dbgPlQueryFast(
+    string s, long kmer, 
+    size_t length, size_t* dbGreplingUnitig = 0, int mode = 1, 
+    sdsl::rank_support_v5<1> * r_ = NULL,
+    double* sa_search_time = NULL, 
+    double* unitig_search_time = NULL) {
+
+    auto start = std::chrono::system_clock::now();
+    long long ans = plQuery(s, kmer, length, mode);
+    auto end = std::chrono::system_clock::now();
+    *sa_search_time += (end-start).count();
+
+    // Binary search unitigEnds to find associated unitig of query string
+    start = std::chrono::system_clock::now();
+    if (dbGreplingUnitig && ans != -1) {
+      if (r_) {
+        *dbGreplingUnitig = r_->rank(ans);
+      } else {
+        
+        size_t idx = findUnitig(ans, 0, unitigEnds.size());
+
+        // for (int i=0; i<100; i++) {
+        //   // cout << idx << endl;
+
+        // }
+        if (idx != -1)
+        {
+          *dbGreplingUnitig = idx;
+        }
+      }
+    }
+    end = std::chrono::system_clock::now();
+    *unitig_search_time += (end-start).count();
+    // (*unitig_search_time) += 1;
+    // *unitig_search_time += (end-start).size();
+
+    // cout << "sa search: " << elapsed_seconds_sa_search.count() << " unitig search: " << 
+    //   elapsed_seconds_unitig_search.count() << " total: " << elapsed_seconds_sa_search.count()+elapsed_seconds_unitig_search.count() 
+    //   << endl;
 
     return ans;
   }
@@ -810,7 +876,11 @@ struct Sapling
     long saSize = GetFileSize(fn);
     long saplingSize = GetFileSize(saplingfn);
     // cout << fn << " sapling file: " << saplingfn << endl;
-    cout << "sa size: " << saSize << " sapling size: " << saplingSize << " total size: " << saSize+saplingSize << endl;
+    long unitigEndsSize = unitigEnds.size() * sizeof(size_t);
+    cout << "sa size: " << saSize << " sapling size: " << saplingSize << 
+      " unitigEnds size: " << unitigEndsSize << " total size: " << saSize + saplingSize + unitigEndsSize << endl;
+    
+
     // printf("sa size: %lu, sapling size: %lu")
     
   }

@@ -34,10 +34,17 @@ void run_experiment(int queryLength);
 
 int main(int argc, char **argv)
 {
-    srand(time(NULL));
+    // srand(time(NULL));
+    // srand(0);
+
     if(argc < 2)
     {
         cout << "Usage: " << argv[0] << " <genome file> [saFn=<suffix array file>] [sapFn=<sapling file>] [nb=<log number of buckets>] [maxMem=<max number of buckets will be (genome size)/val>] [k=<k>] [nq=<number of queries>] [errFn=<errors file if outputting them>] [qLen=<query length>] [dBGrepling=<true/false>] [mode=naive/learned] [unitigSearchMethod=<rank/binary_search>]" << endl;
+        // " <genome file> [saFn=<suffix array file>] 
+        // [sapFn=<sapling file>] [nb=<log number of buckets>] [maxMem=<max number of buckets will be (genome size)/val>] 
+        // [k=<k>] [nq=<number of queries>] [errFn=<errors file if outputting them>] [qLen=<query length>] 
+        // [dBGrepling=<true/false>] [mode=naive/learned] [unitigSearchMethod=<rank/binary_search>]" << endl;
+
         return 0;
     }
 
@@ -164,19 +171,38 @@ void run_experiment(int queryLength)
     vector<size_t> unitigAnswers(numQueries, 0);
     sdsl::rank_support_v5<1> r(sap.getUnitigBitVec());
 
+    std::chrono::duration<double> sa_search_time = std::chrono::duration<double>();
+    std::chrono::duration<double> unitig_search_time = std::chrono::duration<double>();
+
     auto start = std::chrono::system_clock::now();
     for(int i = 0; i<numQueries; i++)
     {
-      if (dBGrepling) {
-        plAnswers[i] = sap.dbgPlQuery(queries[i].substr(0, queryLength), kmers[i], queries[i].length(), &(unitigAnswers[i]), mode, &r);
+      if (dBGrepling) { // run on the dBG
+        if (unitigSearchMethod == 1) { // binary search
+          plAnswers[i] = sap.dbgPlQuery(
+          queries[i].substr(0, queryLength), 
+          kmers[i], queries[i].length(), 
+          &(unitigAnswers[i]), mode, NULL, &sa_search_time, &unitig_search_time);
+        } else {
+          plAnswers[i] = sap.dbgPlQuery(
+          queries[i].substr(0, queryLength), 
+          kmers[i], queries[i].length(), 
+          &(unitigAnswers[i]), mode, &r, &sa_search_time, &unitig_search_time);
+        }
+
       }
-      else {
-        plAnswers[i] = sap.dbgPlQuery(queries[i].substr(0, queryLength), kmers[i], queries[i].length(), NULL, mode);
+      else { // on the reference
+        // plAnswers[i] = sap.dbgPlQuery(queries[i].substr(0, queryLength), kmers[i], queries[i].length(), NULL, mode);
+        plAnswers[i] = sap.plQuery(queries[i].substr(0, queryLength), kmers[i], queries[i].length());
+
       }
     }
     auto end = std::chrono::system_clock::now();
     std::chrono::duration<double> elapsed_seconds = end-start;
-    cout << "Piecewise linear time: " << elapsed_seconds.count() << endl;
+    cout << "Piecewise linear time: " << elapsed_seconds.count() << " sa time: " << sa_search_time.count() <<
+      " unitig time: " << unitig_search_time.count() << endl;
+
+
 
     // Check the answers
     int countCorrect = 0;
