@@ -198,8 +198,8 @@ void run_experiment(int queryLength)
 
       }
       else { // on the reference
+        // plAnswers[i] = sap.dbgPlQuery(queries[i].substr(0, queryLength), kmers[i], queries[i].length(), NULL, mode, NULL, &sa_search_time, &unitig_search_time);
         plAnswers[i] = sap.plQuery(queries[i].substr(0, queryLength), kmers[i], queries[i].length());
-
       }
     }
     auto end = std::chrono::system_clock::now();
