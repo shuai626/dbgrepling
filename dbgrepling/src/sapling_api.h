@@ -261,16 +261,13 @@ struct Sapling
     string s, long kmer, 
     size_t length, size_t* dbGreplingUnitig = 0, int mode = 1, 
     sdsl::rank_support_v5<1> * r_ = NULL,
-    double* sa_search_time = NULL, 
-    double* unitig_search_time = NULL) {
+    std::chrono::duration<double>* sa_search_time = NULL, 
+    std::chrono::duration<double>* unitig_search_time = NULL) {
 
-    auto start = std::chrono::system_clock::now();
     long long ans = plQuery(s, kmer, length, mode);
-    auto end = std::chrono::system_clock::now();
-    *sa_search_time += (end-start).count();
 
     // Binary search unitigEnds to find associated unitig of query string
-    start = std::chrono::system_clock::now();
+    // start = std::chrono::system_clock::now();
     if (dbGreplingUnitig && ans != -1) {
       if (r_) {
         *dbGreplingUnitig = r_->rank(ans);
@@ -288,8 +285,8 @@ struct Sapling
         }
       }
     }
-    end = std::chrono::system_clock::now();
-    *unitig_search_time += (end-start).count();
+    // end = std::chrono::system_clock::now();
+    // *unitig_search_time += (end-start).count();
     // (*unitig_search_time) += 1;
     // *unitig_search_time += (end-start).size();
 
@@ -705,6 +702,8 @@ struct Sapling
         if (dBGrepling) {
           charCount++;
           out << '^';
+          // out << 'A';
+
           unitigEnds.push_back(charCount);
         }
       }

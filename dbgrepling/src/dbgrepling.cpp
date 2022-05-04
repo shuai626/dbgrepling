@@ -151,19 +151,21 @@ void run_experiment(int queryLength)
     {
       idxs[i] = rand() % (sap.n - queryLength);
       queries[i] = sap.reference.substr(idxs[i], queryLength);
+      // discard queries that span unitigs
+      
     	kmers[i] = sap.kmerizeAdjusted(queryLength, queries[i]);
     }
 	// Write the queries to a file
-    FILE *outfile = fopen ("queries.out", "w");
-    for(int i = 0; i < numQueries; i++)
-    {
-        fprintf(outfile, "@read%d\n", i+1);
-        fprintf(outfile, "%s\n", queries[i].c_str());
-        fprintf(outfile, "+\n");
+    // FILE *outfile = fopen ("queries.out", "w");
+    // for(int i = 0; i < numQueries; i++)
+    // {
+    //     fprintf(outfile, "@read%d\n", i+1);
+    //     fprintf(outfile, "%s\n", queries[i].c_str());
+    //     fprintf(outfile, "+\n");
         
-        for(int j = 0; j<queryLength; j++) fprintf(outfile, "9");
-        fprintf(outfile, "\n");
-    }
+    //     for(int j = 0; j<queryLength; j++) fprintf(outfile, "9");
+    //     fprintf(outfile, "\n");
+    // }
     cout << "Constructed queries" << endl;
     
     // Run piece-wise linear test
@@ -178,21 +180,24 @@ void run_experiment(int queryLength)
     for(int i = 0; i<numQueries; i++)
     {
       if (dBGrepling) { // run on the dBG
+        // plAnswers[i] = sap.plQuery(queries[i].substr(0, queryLength), kmers[i], queries[i].length());
+
         if (unitigSearchMethod == 1) { // binary search
-          plAnswers[i] = sap.dbgPlQuery(
+          plAnswers[i] = sap.dbgPlQueryFast(
           queries[i].substr(0, queryLength), 
           kmers[i], queries[i].length(), 
           &(unitigAnswers[i]), mode, NULL, &sa_search_time, &unitig_search_time);
+
         } else {
-          plAnswers[i] = sap.dbgPlQuery(
+          plAnswers[i] = sap.dbgPlQueryFast(
           queries[i].substr(0, queryLength), 
           kmers[i], queries[i].length(), 
           &(unitigAnswers[i]), mode, &r, &sa_search_time, &unitig_search_time);
+
         }
 
       }
       else { // on the reference
-        // plAnswers[i] = sap.dbgPlQuery(queries[i].substr(0, queryLength), kmers[i], queries[i].length(), NULL, mode);
         plAnswers[i] = sap.plQuery(queries[i].substr(0, queryLength), kmers[i], queries[i].length());
 
       }
