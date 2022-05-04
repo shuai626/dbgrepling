@@ -8,7 +8,8 @@ BCALM_PATH=~/Desktop/bcalm-binaries-v2.2.3-Mac/bin/bcalm    # Point this to your
 UST_PATH=~/Desktop/UST/ust                                  # Point this to your compiled version of ust
 k=11
 
-mkdir substr/
+mkdir -p substr/
+rm substr/*
 
 # Create substrings of input file
 for N in 1000 10000 100000 1000000 10000000 100000000
