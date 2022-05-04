@@ -230,9 +230,6 @@ struct Sapling
     if (dbGreplingUnitig && ans != -1) {
       if (r_) {
         *dbGreplingUnitig = r_->rank(ans);
-        end = std::chrono::system_clock::now();
-        *unitig_search_time += (end-start);
-        return ans;
       } else {
         
         size_t idx = findUnitig(ans, 0, unitigEnds.size());
