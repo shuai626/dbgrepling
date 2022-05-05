@@ -22,7 +22,7 @@ struct Sapling
   string reference;
   
   // log_2 of the number of characters in the alphabet - currently assuming A/C/G/T
-  int alpha = 3;
+  int alpha = 2;
   
   // The length of k-mers to use when building/querying the index
   int k = 21;
@@ -585,8 +585,12 @@ struct Sapling
     vals['C'] = 1;
     vals['G'] = 2;
     vals['T'] = 3;
-    vals['^'] = 4;
 
+    if (dBGrepling) {
+      alpha += 1;
+      vals['^'] = 4;
+    }
+    
     buckets = numBuckets;
     errorsFn = errorFn;
 
