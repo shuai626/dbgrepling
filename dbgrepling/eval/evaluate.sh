@@ -16,7 +16,7 @@ do
   ../src/dbgrepling substr/${N}.unitigs.fa.ust.fa dBGrepling=true mode=learned nq=1000000 k=11 qLen=11 unitigSearchMethod=binary_search
 done
 
-for GENOME in C.elegans E.coli G.morhau GRCh38_chrom13
+for GENOME in C.elegans E.coli GRCh38_chrom13
 do
     # Simpaccel Binary Search
   ../src/dbgrepling ${GENOME}/genome.fa dBGrepling=false mode=naive nq=1000000 k=11 qLen=11
