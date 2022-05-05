@@ -18,3 +18,8 @@ To create substrings of genome, call:
 ```
 bash substringify.sh <genome_file.fa>
 ```
+
+# Evaluate the Data
+```
+bash evaluate.sh
+```
