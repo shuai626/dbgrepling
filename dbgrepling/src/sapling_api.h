@@ -208,7 +208,39 @@ struct Sapling
     // Binary search unitigEnds to find associated unitig of query string
     if (dbGreplingUnitig && ans != -1) {
       if (r_) {
-        *dbGreplingUnitig = r_->rank(ans);
+        size_t startUnitig = r_->rank(ans);
+        size_t endUnitig = r_->rank(ans + k);
+
+        if (startUnitig == endUnitig) {
+          *dbGreplingUnitig = startUnitig;
+          return ans;
+        }
+        else {
+          // Scan along suffix array for other query matches
+          size_t saIdx = rev[ans];
+          size_t leftBound = countHitsLeft(saIdx, n);
+          size_t rightBound = countHitsRight(saIdx, n);
+
+          if (leftBound + rightBound != 0) {
+            for (size_t i = saIdx - leftBound; i <= saIdx + rightBound; i++) {
+              size_t refIdx = rev[i];
+
+              if (refIdx < n - k) {
+                startUnitig = r_->rank(refIdx);
+                endUnitig = r_->rank(refIdx + k);
+
+                if (startUnitig == endUnitig) {
+                  *dbGreplingUnitig = startUnitig;
+                  break;
+                }
+              }
+              else {
+                continue;
+              }
+            }
+          }
+        }
+        *dbGreplingUnitig = -1;
         return ans;
       }
 
@@ -586,11 +618,6 @@ struct Sapling
     vals['G'] = 2;
     vals['T'] = 3;
 
-    if (dBGrepling) {
-      alpha += 1;
-      vals['^'] = 4;
-    }
-    
     buckets = numBuckets;
     errorsFn = errorFn;
 
@@ -627,8 +654,6 @@ struct Sapling
         // Add separator characters between each unitig
         // Store ending position of each unitig in unitigEnds
         if (dBGrepling) {
-          charCount++;
-          out << '^';
           unitigEnds.push_back(charCount);
         }
       }
