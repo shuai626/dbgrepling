@@ -1,4 +1,4 @@
-for GENOME in C.elegans E.coli GRCh38_chrom13 
+for GENOME in E.coli GRCh38_chrom13 C.elegans GRCH38_chrom6 S.scrofa
 do
   # Simpaccel Binary Search
   ../src/dbgrepling ${GENOME}/genome.fa dBGrepling=false mode=naive nq=1000000 k=11 qLen=11

@@ -2,10 +2,20 @@
 # DOWNLOAD ALL THE DATASETS #
 #############################
 
+# GRCh38 Chromosome 6
+mkdir -p GRCh38_chrom6
+wget http://ftp.ensembl.org/pub/current_fasta/homo_sapiens/dna/Homo_sapiens.GRCh38.dna.chromosome.6.fa.gz -O GRCh38_chrom6/genome.fa.gz
+gunzip -k GRCh38_chrom6/genome.fa.gz
+
 # GRCh38 Chromosome 13
 mkdir -p GRCh38_chrom13
 wget http://ftp.ensembl.org/pub/current_fasta/homo_sapiens/dna/Homo_sapiens.GRCh38.dna.chromosome.13.fa.gz -O GRCh38_chrom13/genome.fa.gz
 gunzip -k GRCh38_chrom13/genome.fa.gz
+
+# Sus scroba (pig) Chromosome 1
+mkdir -p S.scrofa
+wget http://ftp.ensembl.org/pub/release-106/fasta/sus_scrofa/dna/Sus_scrofa.Sscrofa11.1.dna.chromosome.1.fa.gz -O S.scrofa/genome.fa.gz
+gunzip -k S.scrofa/genome.fa.gz
 
 # Gadus morhau (Atlantic Cod)
 mkdir -p G.morhau
