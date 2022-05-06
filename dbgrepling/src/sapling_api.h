@@ -85,7 +85,11 @@ struct Sapling
   long long kmerize(const string& s)
   {
     long long kmer = 0;
-    for(int i = 0; i<k; i++) kmer = (kmer << alpha) | vals[(size_t)s[i]];
+    for(int i = 0; i<k; i++) {
+      if (s[i] != '^') {
+        kmer = (kmer << alpha) | vals[(size_t)s[i]];
+      }
+    }
     return kmer;
   }
 
@@ -96,7 +100,11 @@ struct Sapling
   {
 	if(length >= k) return kmerize(s);
     long long kmer = 0;
-    for(int i = 0; i<length; i++) kmer = (kmer << alpha) | vals[(size_t)s[i]];
+    for(int i = 0; i<length; i++) {
+      if (s[i] != '^') {
+        kmer = (kmer << alpha) | vals[(size_t)s[i]];
+      }
+    }
     kmer = (kmer << alpha) | 2; // Pad with a g to get closer to middle of the range
     return kmer << (2 * (k - length - 1));
   }
@@ -497,6 +505,9 @@ struct Sapling
     for(size_t i = 0; i<(size_t)(1L<<buckets)+1; i++) xlist[i] = -1;
     for(size_t i = 0; i+k<=s.length(); i++)
     {
+      if (s[i] == '^') {
+        i++;
+      }
       // Use the hash as x value and then update the hash for next time
       long long x = hash;
       hash &= (1L << (2*(k-1))) - 1;
@@ -546,6 +557,9 @@ struct Sapling
     hash = kmerize(s.substr(0, k));
     for(size_t i = 0; i+k<=s.length(); i++)
     {
+      if (s[i] == '^') {
+        i++;
+      }
       // Get predicted suffix array position
       size_t predict = queryPiecewiseLinear(hash);
 

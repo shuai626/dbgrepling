@@ -144,6 +144,11 @@ void run_experiment(int queryLength)
     {
       idxs[i] = rand() % (sap.n - queryLength);
       queries[i] = sap.reference.substr(idxs[i], queryLength);
+
+      while (queries[i].find('^') != string::npos) {
+        idxs[i] = rand() % (sap.n - queryLength);
+        queries[i] = sap.reference.substr(idxs[i], queryLength);
+      }
     	kmers[i] = sap.kmerizeAdjusted(queryLength, queries[i]);
     }
 	// Write the queries to a file
