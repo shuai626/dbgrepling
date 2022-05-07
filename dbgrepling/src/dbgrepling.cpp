@@ -186,7 +186,7 @@ void run_experiment(int queryLength)
     // Check the answers
     int countCorrect = 0;
     for(int i = 0; i<numQueries; i++)
-    {
+    { 
         if(plAnswers[i] == -1) continue;
         if(plAnswers[i] + (long long)queryLength <= (long long)sap.n && queries[i] == sap.reference.substr(plAnswers[i], queryLength))
         {
