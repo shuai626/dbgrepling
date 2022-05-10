@@ -6,9 +6,6 @@ A method for achieving suffix array queries on a set of unitigs.
 
 Directory containing all source code and modifications 
 
-## eval/
-
-Directory containing all scripts related to downloading / processing data and evaluating dbGrepling.
 
 ### Building:
 1. Install (`sdsl-lite`)[https://github.com/simongog/sdsl-lite]. The `src/` Makefile assumes
@@ -38,6 +35,10 @@ src/dbgrepling <genome file (Fasta format)>
 By setting `dBGrepling=true`, the executable assumes it is passed a Fasta file for stitched unitigs. Otherwise, it will process the Fasta file the same way as Sapling.
 By setting `mode=learned`, the executable uses a learned index of the suffix array to narrow the query space. Otherwise, it will use the naive binary search.
 By setting `unitigSearchMethod=rank`, the executable will use a bit-vector and rank algorithm to calculate the unitig position. Otherwise, it will use a naive binary search over the unitig positions.
+
+## eval/
+
+Directory containing all scripts related to downloading / processing data and evaluating dbGrepling.
 
 ### Benchmarking DBGrepling:
 Click on the `eval` directory to learn more
