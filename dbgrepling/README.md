@@ -24,5 +24,6 @@ src/dbgrepling <genome file (Fasta format)>
   [errFn=<errors file if outputting them, default None>]
   [dBGrepling=<true/false>]
   [mode=naive/learned]
+  [unitigSearchMethod=<rank/binary_search>]
 ```
  
