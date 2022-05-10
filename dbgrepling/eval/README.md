@@ -1,4 +1,5 @@
 # Download the Data
+View the contents of `download.sh` to see the genomes that dbGrepling was evaluted against
 
 ```
 bash download.sh
@@ -14,10 +15,12 @@ bash download.sh
 bash preprocess.sh
 ```
 
-To create substrings of genome, call:
+To create substrings of length 1,000 to 1,000,000 of a genome, call:
 ```
 bash substringify.sh <genome_file.fa>
 ```
+
+Note that we use `./C.elegans/genome.fa.gz` 
 
 # Evaluate the Data
 ```
