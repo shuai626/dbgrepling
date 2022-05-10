@@ -9,7 +9,7 @@ Directory containing all source code and modifications
 
 ### Building:
 1. Install (`sdsl-lite`)[https://github.com/simongog/sdsl-lite]. The `src/` Makefile assumes
-the `sdsl-lite` library dependencies are installed in `~/lib`.
+the `sdsl-lite` library dependencies are installed in `~/lib`. At this time, `sdsl-lite`'s main branch is on commit number c32874cb2d8524119f25f3b501526fe692df29f4.
 
 2. Run the following code:
 ```
