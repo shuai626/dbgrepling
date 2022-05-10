@@ -20,7 +20,7 @@ To create substrings of length 1,000 to 1,000,000 of a genome, call:
 bash substringify.sh <genome_file.fa>
 ```
 
-Note that we use `./C.elegans/genome.fa.gz` 
+Note that we use `./C.elegans/genome.fa` 
 
 # Evaluate the Data
 ```
