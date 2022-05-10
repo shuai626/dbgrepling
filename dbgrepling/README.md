@@ -12,7 +12,7 @@ cd src
 make
 ```
   
-### Running DBGrepling test:  
+### Running DBGrepling:  
 ```
 src/dbgrepling <genome file (Fasta format)> 
   [saFn=<suffix array file (format described in manual, default <genome file>.sa)>] 
@@ -27,3 +27,9 @@ src/dbgrepling <genome file (Fasta format)>
   [unitigSearchMethod=<rank/binary_search>]
 ```
  
+By setting `dBGrepling=true`, the executable assumes it is passed a Fasta file for stitched unitigs. Otherwise, it will process the Fasta file the same way as Sapling.
+By setting `mode=learned`, the executable uses a learned index of the suffix array to narrow the query space. Otherwise, it will use the naive binary search.
+By setting `unitigSearchMethod=rank`, the executable will use a bit-vector and rank algorithm to calculate the unitig position. Otherwise, it will use a naive binary search over the unitig positions.
+
+### Benchmarking DBGrepling:
+Click on the `eval` directory to learn more
