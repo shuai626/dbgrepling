@@ -2,6 +2,14 @@
   
 A method for achieving suffix array queries on a set of unitigs.
 
+## src/ 
+
+Directory containing all source code and modifications 
+
+## eval/
+
+Directory containing all scripts related to downloading / processing data and evaluating dbGrepling.
+
 ### Building:
 1. Install (`sdsl-lite`)[https://github.com/simongog/sdsl-lite]. The `src/` Makefile assumes
 the `sdsl-lite` library dependencies are installed in `~/lib`.
